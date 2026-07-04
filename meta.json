@@ -1,0 +1,44 @@
+{
+  "current": "0.2.0",
+  "versions": [
+    {
+      "version": "0.2.0",
+      "published_at": "2026-07-04",
+      "changes": [
+        "Vue « par signal » (natural grouping BCP-002-01) : une colonne/ligne par groupe de signaux au lieu d'un flux ; libellé = nom du groupe + pastilles des essences (V/A/ANC). Bascule « par flux / par signal » persistée",
+        "Groupement lu dans le tag IS-04 urn:x-nmos:tag:grouphint/v1.0 (« <groupe>:<rôle> ») ; repli HEURISTIQUE quand le node n'en pose pas (préfixe de libellé commun au sein d'une machine, essence retirée), signalé « déduit » (inferred) ; les signaux sans groupe restent affichés seuls",
+        "État groupé d'un croisement : complet (toutes les paires d'essences routées), partiel (certaines seulement) ou vide, calculé côté front depuis /grid",
+        "TAKE GROUPÉ (POST /take-group) et déconnexion groupée (POST /disconnect-group) : appariement des essences video↔video, audio↔audio (par rôle/ordre), data/anc↔data ; rapport par paire (ok / échec / sans correspondance)",
+        "Repli par équipement (senders et receivers, indépendamment) : une machine repliée reste visible en en-tête fin, avec indicateur des croisements actifs masqués",
+        "Recherche libre dans la barre d'outils : filtre lignes ET colonnes en direct (insensible casse/accents) sur libellé, nom de groupe et nom de machine",
+        "Mode « câblées uniquement » : masque les destinations sans aucun croisement actif (en vue par signal : groupe entièrement non routé masqué)",
+        "Favoris : machines épinglées remontées en tête des deux axes (étoile sur l'en-tête de groupe)",
+        "Persistance localStorage (clé préfixée par le type) des préférences d'affichage : vue, filtres essence/machine, câblées, machines repliées, favoris (la recherche n'est pas persistée)",
+        "Parc simulé enrichi : machines à grouphints (SDI 1/2, MV IN 1/2 avec vidéo + audios + ANC), machine sans grouphint pour l'heuristique (Convertisseur), signal orphelin (Mire)"
+      ],
+      "fixes": [],
+      "known_bugs": [
+        "L'appariement des essences pour le take groupé se fait par ordre de rôle/libellé : deux audios de même rôle mais mal nommés peuvent être croisés dans l'ordre lexicographique plutôt que par intention",
+        "L'alignement vertical des colonnes collantes sous l'en-tête de machine repose sur une hauteur mesurée au rendu (--ng-grp-h) : un thème très dense peut introduire un léger décalage jusqu'au prochain rendu"
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "published_at": "2026-07-04",
+      "changes": [
+        "Version initiale : routeur logiciel ST 2110 sur NMOS (IS-04 / IS-05) présenté en grille X/Y — senders en colonnes, receivers en lignes",
+        "Inventaire repris en lecture seule du parc « Convertisseurs Blackmagic » (volume partagé, monté ro) + nodes NMOS manuels ; filtres par essence (vidéo / audio / data-anc) et par machine",
+        "Détection de l'état courant de chaque croisement via IS-05 /single/receivers/<id>/active (corrélation par sender_id, sinon par adresse multicast:port)",
+        "TAKE en mode « préparer / take » : transportfile SDP du sender → PATCH staged du receiver (activation immédiate, master_enable true) ; bouton « déconnecter » (master_enable false)",
+        "Salvos : ensembles nommés de croisements (créés depuis le routage courant ou édités), applicables d'un clic avec rapport succès/échec par croisement",
+        "Snapshots : photo du routage complet courant, rappelable par ré-application, avec liste et suppression",
+        "Rafraîchissement périodique léger de l'état + bouton d'actualisation",
+        "Mode SIMULATION : parc démo (3 machines, senders/receivers vidéo + audio) quand l'inventaire est vide — toute l'UI (takes, salvos, snapshots) testable sans matériel"
+      ],
+      "fixes": [],
+      "known_bugs": [
+        "La corrélation d'un croisement actif sur des nodes qui n'exposent pas sender_id repose sur l'adresse multicast:port : deux senders partageant la même destination peuvent être confondus (à lever via le plan multicast, cf. Diagnostic NMOS)."
+      ]
+    }
+  ]
+}

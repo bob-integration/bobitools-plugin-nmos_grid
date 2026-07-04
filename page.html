@@ -1,0 +1,98 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later
+     Grille NMOS — fragment monté par window.BTTools.nmos_grid.mount(el, ctx).
+     Front pur : toute la logique tourne dans le conteneur, atteinte via ctx.api(...).
+     Routeur logiciel ST 2110 : matrice X/Y senders × receivers, TAKE / salvos / snapshots. -->
+<div class="ng-app">
+  <div class="ng-bar">
+    <strong class="ng-title" data-i18n="plugin.nmos_grid.title">Grille NMOS</strong>
+    <span class="ng-badge-sim" id="ng-sim" hidden data-i18n="plugin.nmos_grid.simBadge">SIMULATION</span>
+    <span class="ng-spacer"></span>
+    <input type="search" id="ng-search" class="ng-search" data-i18n-ph="plugin.nmos_grid.searchPh"
+           placeholder="Rechercher un signal, un groupe, une machine…" autocomplete="off">
+    <label class="ng-flabel" data-i18n="plugin.nmos_grid.view">Vue</label>
+    <select id="ng-f-view">
+      <option value="flux" data-i18n="plugin.nmos_grid.viewFlux">Par flux</option>
+      <option value="signal" data-i18n="plugin.nmos_grid.viewSignal">Par signal</option>
+    </select>
+    <label class="ng-flabel" data-i18n="plugin.nmos_grid.essence">Essence</label>
+    <select id="ng-f-essence">
+      <option value="" data-i18n="plugin.nmos_grid.all">Toutes</option>
+      <option value="video">vidéo</option>
+      <option value="audio">audio</option>
+      <option value="data">data / ANC</option>
+    </select>
+    <label class="ng-flabel" data-i18n="plugin.nmos_grid.machine">Machine</label>
+    <select id="ng-f-machine"><option value="" data-i18n="plugin.nmos_grid.all">Toutes</option></select>
+    <label class="ng-check"><input type="checkbox" id="ng-f-wired">
+      <span data-i18n="plugin.nmos_grid.wiredOnly">Câblées uniquement</span></label>
+    <button class="btn" id="ng-refresh" type="button" title="Actualiser">↻</button>
+    <button class="btn btn-green" id="ng-add" type="button" data-i18n="plugin.nmos_grid.addNode">+ Node manuel</button>
+  </div>
+
+  <div class="ng-sim-hint" id="ng-sim-hint" hidden data-i18n="plugin.nmos_grid.simHint">
+    Aucun équipement dans l'inventaire : parc SIMULÉ actif. Ajoutez un node manuel ou peuplez le parc « Convertisseurs Blackmagic » pour piloter du matériel réel.
+  </div>
+
+  <form class="ng-form" id="ng-form" hidden>
+    <div class="ng-form-grid">
+      <label for="ng-f-name" data-i18n="plugin.nmos_grid.f.name">Nom</label>
+      <input type="text" id="ng-f-name" placeholder="Bobi.Studio">
+      <label for="ng-f-host" data-i18n="plugin.nmos_grid.f.host">Adresse</label>
+      <input type="text" id="ng-f-host" placeholder="10.141.4.200">
+      <label for="ng-f-port" data-i18n="plugin.nmos_grid.f.port">Port API NMOS</label>
+      <input type="number" id="ng-f-port" placeholder="5000">
+    </div>
+    <div class="ng-manual" id="ng-manual"></div>
+    <div class="ng-form-actions">
+      <button class="btn btn-green" type="submit" data-i18n="plugin.nmos_grid.save">Ajouter</button>
+      <button class="btn" type="button" id="ng-f-cancel" data-i18n="plugin.nmos_grid.cancel">Fermer</button>
+    </div>
+  </form>
+
+  <!-- Barre « préparer / take » -->
+  <div class="ng-take-bar" id="ng-take-bar" hidden>
+    <span class="ng-take-txt" id="ng-take-txt"></span>
+    <span class="ng-spacer"></span>
+    <button class="btn btn-green" id="ng-take-do" type="button" data-i18n="plugin.nmos_grid.take">TAKE</button>
+    <button class="btn" id="ng-take-cancel" type="button" data-i18n="plugin.nmos_grid.cancel">Annuler</button>
+  </div>
+
+  <!-- Légende (visible en vue par signal / avec repli) -->
+  <div class="ng-legend" id="ng-legend" hidden>
+    <span class="ng-lg"><span class="ng-lg-dot full"></span><span data-i18n="plugin.nmos_grid.lgFull">complet</span></span>
+    <span class="ng-lg"><span class="ng-lg-dot partial"></span><span data-i18n="plugin.nmos_grid.lgPartial">partiel</span></span>
+    <span class="ng-lg"><span class="ng-lg-ico">▸</span><span data-i18n="plugin.nmos_grid.lgCollapsed">équipement replié (cliquez ▸/▾)</span></span>
+    <span class="ng-lg"><span class="ng-lg-ico">★</span><span data-i18n="plugin.nmos_grid.lgPinned">épinglé en tête</span></span>
+    <span class="ng-lg"><span class="ng-inferred">≈</span><span data-i18n="plugin.nmos_grid.lgInferred">groupe déduit du libellé</span></span>
+  </div>
+
+  <!-- Matrice -->
+  <div class="ng-grid-wrap" id="ng-grid-wrap">
+    <div class="ng-meta" data-i18n="plugin.nmos_grid.loading">Chargement…</div>
+  </div>
+
+  <div class="ng-panels">
+    <!-- Salvos -->
+    <section class="ng-panel">
+      <div class="ng-bar">
+        <h3 data-i18n="plugin.nmos_grid.salvos">Salvos</h3>
+        <span class="ng-spacer"></span>
+        <button class="btn btn-green" id="ng-salvo-new" type="button" data-i18n="plugin.nmos_grid.salvoNew">+ Depuis le routage courant</button>
+      </div>
+      <div class="ng-list" id="ng-salvos"></div>
+    </section>
+
+    <!-- Snapshots -->
+    <section class="ng-panel">
+      <div class="ng-bar">
+        <h3 data-i18n="plugin.nmos_grid.snapshots">Snapshots</h3>
+        <span class="ng-spacer"></span>
+        <button class="btn btn-green" id="ng-snap-new" type="button" data-i18n="plugin.nmos_grid.snapNew">+ Photographier le routage</button>
+      </div>
+      <div class="ng-list" id="ng-snaps"></div>
+    </section>
+  </div>
+
+  <!-- Rapport d'application (salvo / snapshot) -->
+  <div class="ng-report" id="ng-report" hidden></div>
+</div>
