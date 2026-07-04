@@ -140,10 +140,15 @@ class NmosNode:
 
     def sender_active(self, sid):
         d = self._req("GET", f"connection/{self.conn_ver()}/single/senders/{sid}/active") or {}
-        tp = (d.get("transport_params") or [{}])[0]
+        tps = d.get("transport_params") or [{}]
+        # TOUS les legs (ST 2022-7 : primaire + secondaire) pour une corrélation robuste ;
+        # les deux extrémités n'ordonnent pas forcément leurs legs de la même façon.
+        legs = [{"dest_ip": tp.get("destination_ip"), "dest_port": tp.get("destination_port"),
+                 "source_ip": tp.get("source_ip")} for tp in tps]
+        tp0 = tps[0]
         return {"master_enable": bool(d.get("master_enable")),
-                "dest_ip": tp.get("destination_ip"), "dest_port": tp.get("destination_port"),
-                "source_ip": tp.get("source_ip")}
+                "dest_ip": tp0.get("destination_ip"), "dest_port": tp0.get("destination_port"),
+                "source_ip": tp0.get("source_ip"), "legs": legs}
 
     def sender_sdp(self, sid):
         """Le transportfile (SDP) publié par un sender. Texte brut."""
@@ -156,13 +161,16 @@ class NmosNode:
         """État courant d'abonnement d'un receiver. `sender_id` (quand exposé par le node) et
         `multicast_ip`:port sont les DEUX voies de corrélation vers le sender abonné."""
         d = self._req("GET", f"connection/{self.conn_ver()}/single/receivers/{rid}/active") or {}
-        tp = (d.get("transport_params") or [{}])[0]
+        tps = d.get("transport_params") or [{}]
         tf = d.get("transport_file") or {}
+        legs = [{"multicast_ip": tp.get("multicast_ip"), "source_ip": tp.get("source_ip"),
+                 "dest_port": tp.get("destination_port")} for tp in tps]
+        tp0 = tps[0]
         return {"master_enable": bool(d.get("master_enable")),
                 "sender_id": d.get("sender_id"),
-                "multicast_ip": tp.get("multicast_ip"), "source_ip": tp.get("source_ip"),
-                "dest_port": tp.get("destination_port"), "interface_ip": tp.get("interface_ip"),
-                "has_sdp": bool(tf.get("data"))}
+                "multicast_ip": tp0.get("multicast_ip"), "source_ip": tp0.get("source_ip"),
+                "dest_port": tp0.get("destination_port"), "interface_ip": tp0.get("interface_ip"),
+                "has_sdp": bool(tf.get("data")), "legs": legs}
 
     def apply_sdp(self, rid, sdp, enable=True):
         """PATCH staged du receiver avec le SDP fourni + activation immédiate.
@@ -199,7 +207,7 @@ class NmosNode:
                             "group": _grouphint(s),
                             "master_enable": act.get("master_enable", False),
                             "dest_ip": act.get("dest_ip"), "dest_port": act.get("dest_port"),
-                            "source_ip": act.get("source_ip")})
+                            "source_ip": act.get("source_ip"), "legs": act.get("legs")})
         receivers = []
         for r in self._list("receivers"):
             rid = r.get("id")
@@ -215,5 +223,6 @@ class NmosNode:
                               "multicast_ip": act.get("multicast_ip"),
                               "source_ip": act.get("source_ip"),
                               "dest_port": act.get("dest_port"),
-                              "has_sdp": act.get("has_sdp", False)})
+                              "has_sdp": act.get("has_sdp", False),
+                              "legs": act.get("legs")})
         return {"label": info.get("label") or "", "senders": senders, "receivers": receivers}

@@ -4,7 +4,11 @@ Un **routeur logiciel ST 2110** posé par-dessus **NMOS** (IS-04 / IS-05). L'éc
 **matrice X/Y** comme sur un routeur de régie : les **sources** (senders) en colonnes, les
 **destinations** (receivers) en lignes. Un point de croisement allumé = cette destination est
 **actuellement abonnée** à cette source. Cliquer un croisement le prépare ; un **TAKE**
-l'établit réellement.
+l'établit réellement. Cochez **TAKE direct** dans la barre d'outils pour router d'un seul clic,
+sans l'étape « préparer / TAKE » (pratique en exploitation ; préférence mémorisée).
+
+> **Replier / déplier un équipement** : cliquez directement sur **son nom** dans la grille
+> (le chevron ▸/▾ n'est qu'un indicateur). Vaut pour les sources comme les destinations.
 
 L'outil ne possède aucun inventaire propre : il **lit le parc** des autres outils. Le parc
 « Convertisseurs Blackmagic » est repris automatiquement (volume partagé, monté en lecture

@@ -372,39 +372,82 @@ def is_sim():
 
 # --------------------------------------------------------------------------- grille (état)
 
-def _match_active(senders, receivers):
+def _sender_legs(s):
+    """Legs de destination d'un sender : liste de {dest_ip, dest_port, source_ip}. Repli sur les
+    champs scalaires (parc simulé, ou node ne renvoyant qu'un leg)."""
+    legs = s.get("legs")
+    if legs:
+        return legs
+    return [{"dest_ip": s.get("dest_ip"), "dest_port": s.get("dest_port"),
+             "source_ip": s.get("source_ip")}]
+
+
+def _receiver_legs(r):
+    """Legs d'abonnement d'un receiver : liste de {multicast_ip, dest_port, source_ip}."""
+    legs = r.get("legs")
+    if legs:
+        return legs
+    return [{"multicast_ip": r.get("multicast_ip"), "dest_port": r.get("dest_port"),
+             "source_ip": r.get("source_ip")}]
+
+
+def _match_active(senders, receivers, debug=False):
     """Renseigne receiver['active_sender_key'] : d'abord par sender_id (IS-05), sinon par
-    corrélation multicast:port (+ source pour lever l'ambiguïté)."""
+    corrélation multicast:port. La corrélation multicast teste TOUS les legs des deux extrémités
+    (ST 2022-7 : les legs ne sont pas forcément ordonnés pareil des deux côtés) et retient la
+    meilleure correspondance (source identique = SSM exact prioritaire). `debug` ajoute
+    receiver['_match'] décrivant la voie retenue (diagnostic « pas de point »)."""
     by_id = {s["id"]: s for s in senders}
     for r in receivers:
         r["active_sender_key"] = None
+        if debug:
+            r["_match"] = {"master_enable": bool(r.get("master_enable")),
+                           "sender_id": r.get("sender_id"), "via": None,
+                           "recv_legs": _receiver_legs(r)}
         if not r.get("master_enable"):
+            if debug:
+                r["_match"]["via"] = "skip:master_enable=false"
             continue
         sid = r.get("sender_id")
         if sid and sid in by_id:
             r["active_sender_key"] = by_id[sid]["key"]
+            if debug:
+                r["_match"]["via"] = "sender_id"
             continue
-        mip = r.get("multicast_ip")
-        if not mip:
-            continue
-        best = None
+        # Repli multicast : tout leg receiver dont le multicast_ip == un dest_ip de sender.
+        best, best_exact = None, False
         for s in senders:
-            if s.get("dest_ip") != mip:
-                continue
-            rp, sp = r.get("dest_port"), s.get("dest_port")
-            if rp and sp and rp != sp:
-                continue
-            rsrc = r.get("source_ip")
-            if rsrc and s.get("source_ip") and rsrc != s.get("source_ip"):
-                continue
-            best = s
-            if rsrc and s.get("source_ip") == rsrc:
-                break  # correspondance exacte SSM : on s'arrête
+            slegs = _sender_legs(s)
+            matched, exact = False, False
+            for rl in _receiver_legs(r):
+                mip = rl.get("multicast_ip")
+                if not mip:
+                    continue
+                for sl in slegs:
+                    if sl.get("dest_ip") != mip:
+                        continue
+                    rp, sp = rl.get("dest_port"), sl.get("dest_port")
+                    if rp and sp and rp != sp:
+                        continue
+                    rsrc = rl.get("source_ip")
+                    if rsrc and sl.get("source_ip") and rsrc != sl.get("source_ip"):
+                        continue
+                    matched = True
+                    if rsrc and sl.get("source_ip") == rsrc:
+                        exact = True
+            if matched and (best is None or (exact and not best_exact)):
+                best, best_exact = s, exact
+                if exact:
+                    break  # correspondance SSM exacte : on s'arrête
         if best:
             r["active_sender_key"] = best["key"]
+            if debug:
+                r["_match"]["via"] = "multicast" + (":ssm" if best_exact else "")
+        elif debug and sid:
+            r["_match"]["via"] = "sender_id-unknown"
 
 
-def _build_grid_live():
+def _build_grid_live(debug=False):
     nodes = all_nodes()
     machines, senders, receivers, unreachable = {}, [], [], []
 
@@ -434,7 +477,7 @@ def _build_grid_live():
                 "label": s["label"], "essence": s.get("essence", ""), "group": s.get("group"),
                 "master_enable": s.get("master_enable", False),
                 "dest_ip": s.get("dest_ip"), "dest_port": s.get("dest_port"),
-                "source_ip": s.get("source_ip")})
+                "source_ip": s.get("source_ip"), "legs": s.get("legs")})
         for r in snap.get("receivers", []):
             receivers.append({
                 "key": f"{n['node_key']}|{r['id']}", "id": r["id"], "node_key": n["node_key"],
@@ -442,8 +485,14 @@ def _build_grid_live():
                 "label": r["label"], "essence": r.get("essence", ""), "group": r.get("group"),
                 "master_enable": r.get("master_enable", False),
                 "sender_id": r.get("sender_id"), "multicast_ip": r.get("multicast_ip"),
-                "source_ip": r.get("source_ip"), "dest_port": r.get("dest_port")})
-    _match_active(senders, receivers)
+                "source_ip": r.get("source_ip"), "dest_port": r.get("dest_port"),
+                "legs": r.get("legs")})
+    _match_active(senders, receivers, debug=debug)
+    if not debug:                     # `legs` n'est utile qu'à la corrélation : hors debug on l'élague
+        for x in senders:
+            x.pop("legs", None)
+        for x in receivers:
+            x.pop("legs", None)
     annotate_groups(senders)          # repli heuristique pour les nodes sans grouphint
     annotate_groups(receivers)
     return {"simulated": False, "machines": list(machines.values()),
@@ -451,9 +500,11 @@ def _build_grid_live():
             "generated_at": time.time()}
 
 
-def build_grid(fresh=False):
+def build_grid(fresh=False, debug=False):
     if is_sim():
         return _sim_grid()  # cache inutile : lecture d'un simple fichier local
+    if debug:
+        return _build_grid_live(debug=True)  # jamais caché : diagnostic à la demande
     now = time.time()
     with _grid_lock:
         c = _grid_cache["data"]
@@ -643,7 +694,9 @@ class Handler(BaseHTTPRequestHandler):
             if parts == ["health"]:
                 return self._send(200, {"ok": True})
             if parts == ["grid"]:
-                return self._send(200, build_grid(fresh=q.get("fresh") in ("1", "true")))
+                debug = q.get("debug") in ("1", "true")
+                return self._send(200, build_grid(fresh=q.get("fresh") in ("1", "true") or debug,
+                                                  debug=debug))
             if parts == ["nodes"]:
                 return self._send(200, {"nodes": all_nodes(), "simulated": is_sim()})
             if parts == ["salvos"]:

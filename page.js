@@ -18,6 +18,7 @@ window.BTTools.nmos_grid = (function () {
     let search = "";                    // recherche libre (NON persistée)
     let view = "flux";                  // "flux" | "signal"
     let wiredOnly = false;              // masque les destinations sans croisement actif
+    let directTake = false;             // TAKE direct : clic = route immédiate (sans préparer/confirmer)
     let collapsedS = new Set();         // machine_key des colonnes (sources) repliées
     let collapsedR = new Set();         // machine_key des lignes (destinations) repliées
     let pinned = new Set();             // machine_key épinglées (en tête des deux axes)
@@ -44,6 +45,7 @@ window.BTTools.nmos_grid = (function () {
         if (p.view === "signal" || p.view === "flux") view = p.view;
         filters.essence = p.essence || ""; filters.machine = p.machine || "";
         wiredOnly = !!p.wiredOnly;
+        directTake = !!p.directTake;
         collapsedS = new Set(Array.isArray(p.collapsedS) ? p.collapsedS : []);
         collapsedR = new Set(Array.isArray(p.collapsedR) ? p.collapsedR : []);
         pinned = new Set(Array.isArray(p.pinned) ? p.pinned : []);
@@ -51,7 +53,7 @@ window.BTTools.nmos_grid = (function () {
     function savePrefs() {
         try {
             window.localStorage.setItem(PREF_KEY(), JSON.stringify({
-                view, essence: filters.essence, machine: filters.machine, wiredOnly,
+                view, essence: filters.essence, machine: filters.machine, wiredOnly, directTake,
                 collapsedS: [...collapsedS], collapsedR: [...collapsedR], pinned: [...pinned]
             }));
         } catch (e) { /* quota / mode privé : on ignore */ }
@@ -66,6 +68,7 @@ window.BTTools.nmos_grid = (function () {
         $("#ng-f-view").value = view;
         $("#ng-f-essence").value = filters.essence;
         $("#ng-f-wired").checked = wiredOnly;
+        $("#ng-f-direct").checked = directTake;
         $("#ng-refresh").addEventListener("click", () => refresh(true));
         $("#ng-add").addEventListener("click", () => { $("#ng-form").hidden = false; renderManual(); });
         $("#ng-f-cancel").addEventListener("click", () => { $("#ng-form").hidden = true; });
@@ -75,6 +78,7 @@ window.BTTools.nmos_grid = (function () {
         $("#ng-f-essence").addEventListener("change", (e) => { filters.essence = e.target.value; savePrefs(); renderGrid(); });
         $("#ng-f-machine").addEventListener("change", (e) => { filters.machine = e.target.value; savePrefs(); renderGrid(); });
         $("#ng-f-wired").addEventListener("change", (e) => { wiredOnly = e.target.checked; savePrefs(); renderGrid(); });
+        $("#ng-f-direct").addEventListener("change", (e) => { directTake = e.target.checked; savePrefs(); clearPending(); renderGrid(); });
         $("#ng-take-do").addEventListener("click", doTake);
         $("#ng-take-cancel").addEventListener("click", clearPending);
         $("#ng-salvo-new").addEventListener("click", newSalvo);
@@ -249,8 +253,11 @@ window.BTTools.nmos_grid = (function () {
         const on = pinned.has(mk);
         return `<button class="ng-pin${on ? " on" : ""}" data-mk="${esc(mk)}" title="${esc(tr("plugin.nmos_grid.pin", "Épingler en tête"))}">${on ? "★" : "☆"}</button>`;
     }
-    function mToggle(side, mk, collapsed) {
-        return `<button class="ng-mtoggle" data-side="${side}" data-mk="${esc(mk)}" title="${esc(collapsed ? tr("plugin.nmos_grid.expand", "Déplier") : tr("plugin.nmos_grid.collapse", "Replier"))}">${collapsed ? "▸" : "▾"}</button>`;
+    // Nom de machine CLIQUABLE : un clic replie/déplie l'équipement (le chevron n'est qu'un
+    // indicateur visuel — plus besoin de viser un petit triangle).
+    function mName(side, mk, name, collapsed) {
+        const title = esc(collapsed ? tr("plugin.nmos_grid.expand", "Déplier") : tr("plugin.nmos_grid.collapse", "Replier"));
+        return `<button class="ng-mname ng-mclick" type="button" data-side="${side}" data-mk="${esc(mk)}" title="${title}"><span class="ng-caret">${collapsed ? "▸" : "▾"}</span>${esc(name)}</button>`;
     }
     const hiddenDot = (on) => on ? `<span class="ng-hid" title="${esc(tr("plugin.nmos_grid.hiddenActive", "croisements actifs masqués"))}">●</span>` : "";
 
@@ -300,8 +307,7 @@ window.BTTools.nmos_grid = (function () {
         if (rd.kind === "mcol") {                    // machine repliée : en-tête fin, ligne unique
             rowh = `<th class="ng-row-h ng-row-mcol">
                 <div class="ng-rowh-flex"><div class="ng-mgrp">
-                  ${mToggle("r", rd.machine_key, true)}${pinStar(rd.machine_key)}
-                  <span class="ng-mname">${esc(rd.label)}</span>
+                  ${pinStar(rd.machine_key)}${mName("r", rd.machine_key, rd.label, true)}
                   <span class="ng-meta">(${rd.members.length})</span>${hiddenDot(receiverMachineActive(rd.machine_key))}
                 </div></div></th>`;
         } else {
@@ -333,8 +339,7 @@ window.BTTools.nmos_grid = (function () {
         let grpHead = `<tr><th class="ng-corner" rowspan="2"><span class="ng-meta">${esc(tr("plugin.nmos_grid.srcDst", "src ▸ / dst ▾"))}</span></th>`;
         headGroups.forEach((h) => {
             grpHead += `<th class="ng-grp-col-h" colspan="${h.span}"><div class="ng-mgrp">
-                ${mToggle("s", h.machine_key, h.collapsed)}${pinStar(h.machine_key)}
-                <span class="ng-mname">${esc(h.name)}</span>${h.collapsed ? hiddenDot(senderMachineActive(h.machine_key)) : ""}
+                ${pinStar(h.machine_key)}${mName("s", h.machine_key, h.name, h.collapsed)}${h.collapsed ? hiddenDot(senderMachineActive(h.machine_key)) : ""}
             </div></th>`;
         });
         grpHead += "</tr>";
@@ -367,8 +372,7 @@ window.BTTools.nmos_grid = (function () {
             if (wiredOnly) rds = rds.filter((rd) => rd.members.some((r) => r.active_sender_key));
             if (!rds.length) return;   // machine sans ligne visible → disparaît (en-tête compris)
             body += `<tr class="ng-grp-row"><th class="ng-grp-row-h" colspan="${totalCols}"><span class="ng-mgrp">
-                ${mToggle("r", m.machine_key, false)}${pinStar(m.machine_key)}
-                <span class="ng-mname">${esc(m.name)}</span></span></th></tr>`;
+                ${pinStar(m.machine_key)}${mName("r", m.machine_key, m.name, false)}</span></th></tr>`;
             rds.forEach((rd) => { const ri = curRows.length; curRows.push(rd); body += renderRow(rd, cols, ri); });
         });
         if (!body) { wrap.innerHTML = emptyMsg(); curRows = []; return; }
@@ -382,7 +386,7 @@ window.BTTools.nmos_grid = (function () {
             td.addEventListener("click", () => onCellClick(+td.dataset.ri, +td.dataset.ci)));
         wrap.querySelectorAll(".ng-disc").forEach((b) =>
             b.addEventListener("click", (ev) => { ev.stopPropagation(); onDisconnect(+b.dataset.ri); }));
-        wrap.querySelectorAll(".ng-mtoggle").forEach((b) =>
+        wrap.querySelectorAll(".ng-mclick").forEach((b) =>
             b.addEventListener("click", (ev) => { ev.stopPropagation(); onToggleMachine(b.dataset.side, b.dataset.mk); }));
         wrap.querySelectorAll(".ng-pin").forEach((b) =>
             b.addEventListener("click", (ev) => { ev.stopPropagation(); onTogglePin(b.dataset.mk); }));
@@ -405,8 +409,34 @@ window.BTTools.nmos_grid = (function () {
         if (!rd || !c || rd.kind === "mcol" || c.kind === "mcol") return;   // machine repliée = parké
         const { pairs } = pairMembers(rd.members, c.members);
         if (!pairs.length) return;
-        if (rd.kind === "group" && c.kind === "group") prepareGroup(rd, c);
+        const grouped = rd.kind === "group" && c.kind === "group";
+        if (directTake) {                       // TAKE direct : on route sans préparer ni confirmer
+            if (grouped) directTakeGroup(rd, c);
+            else directTakeSingle(pairs[0].r, pairs[0].s);
+            return;
+        }
+        if (grouped) prepareGroup(rd, c);
         else prepareSingle(pairs[0].r, pairs[0].s);
+    }
+
+    // ── TAKE direct (sans barre de préparation ni confirmation) ──
+    async function directTakeSingle(r, s) {
+        if (r.active_sender_key === s.key) return;   // croisement déjà actif : rien à faire
+        try { await ctx.api("take", { method: "POST", body: { receiver_key: r.key, sender_key: s.key } }); }
+        catch (e) { toast(e.message, "error"); return; }
+        toast(tr("plugin.nmos_grid.taken", "Croisement établi"), "success");
+        refresh(true);
+    }
+
+    async function directTakeGroup(rd, cd) {
+        let d;
+        try {
+            d = await ctx.api("take-group", { method: "POST", body: {
+                receiver_group: { machine_key: rd.machine_key, name: rd.groupName },
+                sender_group: { machine_key: cd.machine_key, name: cd.groupName } } });
+        } catch (e) { toast(e.message, "error"); return; }
+        showReport(tr("plugin.nmos_grid.takeGroupReport", "Take groupé"), d);
+        refresh(true);
     }
 
     function prepareSingle(r, s) {

@@ -1,6 +1,19 @@
 {
-  "current": "0.2.0",
+  "current": "0.2.1",
   "versions": [
+    {
+      "version": "0.2.1",
+      "published_at": "2026-07-04",
+      "changes": [
+        "TAKE direct : nouvelle case « TAKE direct » dans la barre d'outils — un clic sur un croisement route immédiatement, sans l'étape « Préparer → TAKE » ni confirmation (préférence persistée en localStorage). Le mode « Préparer / TAKE » reste disponible case décochée",
+        "Repli/dépli d'un équipement en cliquant sur son nom (l'ancien petit triangle disparaît ; un chevron ▸/▾ reste comme simple indicateur d'état) — sur les deux axes"
+      ],
+      "fixes": [
+        "Croisement actif non détecté (« point » absent) sur du matériel réel en redondance ST 2022-7 : la corrélation ne lisait que le 1er leg (transport_params[0]). Elle teste désormais TOUS les legs des deux extrémités et retient la meilleure correspondance (source identique = SSM exact prioritaire)",
+        "Diagnostic : GET /grid?debug=1 renvoie, par receiver, un champ `_match` décrivant la voie de corrélation retenue (sender_id / multicast / master_enable=false / sender_id-unknown) pour investiguer un point manquant"
+      ],
+      "known_bugs": []
+    },
     {
       "version": "0.2.0",
       "published_at": "2026-07-04",

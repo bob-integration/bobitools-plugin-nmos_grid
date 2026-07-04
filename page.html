@@ -25,6 +25,9 @@
     <select id="ng-f-machine"><option value="" data-i18n="plugin.nmos_grid.all">Toutes</option></select>
     <label class="ng-check"><input type="checkbox" id="ng-f-wired">
       <span data-i18n="plugin.nmos_grid.wiredOnly">Câblées uniquement</span></label>
+    <label class="ng-check" title="Un clic sur un croisement route immédiatement, sans étape « Préparer → TAKE »">
+      <input type="checkbox" id="ng-f-direct">
+      <span data-i18n="plugin.nmos_grid.directTake">TAKE direct</span></label>
     <button class="btn" id="ng-refresh" type="button" title="Actualiser">↻</button>
     <button class="btn btn-green" id="ng-add" type="button" data-i18n="plugin.nmos_grid.addNode">+ Node manuel</button>
   </div>
@@ -61,7 +64,7 @@
   <div class="ng-legend" id="ng-legend" hidden>
     <span class="ng-lg"><span class="ng-lg-dot full"></span><span data-i18n="plugin.nmos_grid.lgFull">complet</span></span>
     <span class="ng-lg"><span class="ng-lg-dot partial"></span><span data-i18n="plugin.nmos_grid.lgPartial">partiel</span></span>
-    <span class="ng-lg"><span class="ng-lg-ico">▸</span><span data-i18n="plugin.nmos_grid.lgCollapsed">équipement replié (cliquez ▸/▾)</span></span>
+    <span class="ng-lg"><span class="ng-lg-ico">▸</span><span data-i18n="plugin.nmos_grid.lgCollapsed">équipement replié (cliquez sur son nom)</span></span>
     <span class="ng-lg"><span class="ng-lg-ico">★</span><span data-i18n="plugin.nmos_grid.lgPinned">épinglé en tête</span></span>
     <span class="ng-lg"><span class="ng-inferred">≈</span><span data-i18n="plugin.nmos_grid.lgInferred">groupe déduit du libellé</span></span>
   </div>
