@@ -561,6 +561,96 @@ def disconnect(receiver_key):
     NmosNode(rn["host"], rn["port"]).disable_receiver(rid)
 
 
+BOUNCE_DELAY = 1.5  # s entre désarmement et réarmement d'un sender (laisse l'équipement relâcher)
+
+
+def bounce_sender(sender_key):
+    """« Bounce » d'un sender : master_enable false → (pause) → true, activation immédiate.
+    Force un équipement à réarmer son émission 2110. Utile quand un convertisseur garde son
+    sender « enabled » mais n'émet plus rien après un changement de source. ÉCRITURE : agit sur
+    du matériel réel. N.B. NE recrée PAS une émission absente pour cause d'entrée : si le sender
+    n'émet pas parce que l'entrée SDI n'a pas de signal (ou un format non reconnu), le bounce n'y
+    change rien — il ne débloque qu'un sender réellement coincé côté protocole."""
+    if is_sim():
+        return {"ok": True, "simulated": True}
+    nodes = {n["node_key"]: n for n in all_nodes()}
+    snk, sid = _split_key(sender_key)
+    sn = nodes.get(snk)
+    if not sn:
+        raise NmosError("sender introuvable dans le parc")
+    node = NmosNode(sn["host"], sn["port"])
+    node.set_sender_enable(sid, False)
+    time.sleep(BOUNCE_DELAY)
+    node.set_sender_enable(sid, True)
+    return {"ok": True}
+
+
+def set_senders_enable(sender_keys, enable):
+    """Active/désactive l'émission (IS-05 master_enable) d'une liste de senders, activation
+    immédiate. Rapport par sender ; une entrée fautive n'interrompt pas le lot."""
+    keys = list(sender_keys or [])
+    if is_sim():
+        res = [{"sender_key": sk, "status": "ok", "ok": True, "error": None} for sk in keys]
+        return {"results": res, "ok_count": len(res), "fail_count": 0, "simulated": True}
+    nodes = {n["node_key"]: n for n in all_nodes()}
+    out = []
+    for sk in keys:
+        entry = {"sender_key": sk, "status": "ok", "ok": True, "error": None}
+        snk, sid = _split_key(sk)
+        sn = nodes.get(snk)
+        if not sn:
+            entry.update(status="fail", ok=False, error="sender introuvable dans le parc")
+        else:
+            try:
+                NmosNode(sn["host"], sn["port"]).set_sender_enable(sid, bool(enable))
+            except Exception as e:  # noqa: BLE001
+                entry.update(status="fail", ok=False, error=str(e))
+        out.append(entry)
+    invalidate_grid()
+    return {"results": out,
+            "ok_count": sum(1 for r in out if r["ok"]),
+            "fail_count": sum(1 for r in out if not r["ok"])}
+
+
+def bounce_senders(sender_keys):
+    """Relance GROUPÉE (ex-« bounce ») d'une liste de senders. Désarme TOUS les senders, une SEULE pause, puis les
+    réarme tous — ils retombent et reviennent ensemble. Bien plus rapide qu'un bounce unitaire
+    répété (une seule pause au lieu de N) → évite une requête interminable sur un gros lot.
+    Rapport par sender ; une entrée fautive n'interrompt pas le lot."""
+    keys = list(sender_keys or [])
+    if is_sim():
+        res = [{"sender_key": sk, "status": "ok", "ok": True, "error": None} for sk in keys]
+        return {"results": res, "ok_count": len(res), "fail_count": 0, "simulated": True}
+    nodes = {n["node_key"]: n for n in all_nodes()}
+    results = {sk: {"sender_key": sk, "status": "ok", "ok": True, "error": None} for sk in keys}
+    items = []
+    for sk in keys:
+        snk, sid = _split_key(sk)
+        sn = nodes.get(snk)
+        if not sn:
+            results[sk].update(status="fail", ok=False, error="sender introuvable dans le parc")
+            continue
+        items.append((sk, NmosNode(sn["host"], sn["port"]), sid))
+    for sk, node, sid in items:                       # phase 1 : désarmer
+        try:
+            node.set_sender_enable(sid, False)
+        except Exception as e:  # noqa: BLE001 — un sender fautif n'arrête pas le lot
+            results[sk].update(status="fail", ok=False, error="désarmement : " + str(e))
+    time.sleep(BOUNCE_DELAY)
+    for sk, node, sid in items:                       # phase 2 : réarmer (si désarmement OK)
+        if not results[sk]["ok"]:
+            continue
+        try:
+            node.set_sender_enable(sid, True)
+        except Exception as e:  # noqa: BLE001
+            results[sk].update(status="fail", ok=False, error="réarmement : " + str(e))
+    invalidate_grid()
+    out = [results[sk] for sk in keys]
+    return {"results": out,
+            "ok_count": sum(1 for r in out if r["ok"]),
+            "fail_count": sum(1 for r in out if not r["ok"])}
+
+
 def apply_crosspoints(cps):
     """Applique une liste de croisements {receiver_key, sender_key?}. sender_key absent/None =
     déconnexion. Renvoie un rapport par croisement (jamais d'exception qui interrompt le lot)."""
@@ -753,6 +843,26 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(502, {"error": str(e)})
                 invalidate_grid()
                 return self._send(200, {"ok": True})
+            if parts == ["bounce"]:
+                sk = body.get("sender_key")
+                if not sk:
+                    return self._send(400, {"error": "sender_key requis"})
+                try:
+                    res = bounce_sender(sk)
+                except NmosError as e:
+                    return self._send(502, {"error": str(e)})
+                invalidate_grid()
+                return self._send(200, res)
+            if parts == ["bounce-group"]:
+                sks = body.get("sender_keys")
+                if not isinstance(sks, list) or not sks:
+                    return self._send(400, {"error": "sender_keys (liste non vide) requis"})
+                return self._send(200, bounce_senders(sks))
+            if parts == ["sender-enable"]:
+                sks = body.get("sender_keys")
+                if not isinstance(sks, list) or not sks or "enable" not in body:
+                    return self._send(400, {"error": "sender_keys (liste) et enable (bool) requis"})
+                return self._send(200, set_senders_enable(sks, bool(body.get("enable"))))
             if parts == ["salvos"]:
                 return self._salvo_create(body)
             if len(parts) == 3 and parts[0] == "salvos" and parts[2] == "apply":

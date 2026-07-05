@@ -1,6 +1,44 @@
 {
-  "current": "0.2.1",
+  "current": "0.3.0",
   "versions": [
+    {
+      "version": "0.3.0",
+      "published_at": "2026-07-05",
+      "changes": [
+        "Rendu de la matrice délégué au composant PARTAGÉ window.BT.Grid (static/js/bt-grid.js du cœur) : convention commune SOURCES (senders) en LIGNES, DESTINATIONS (receivers) en COLONNES — le tableau est donc inversé par rapport à avant. Repli/épingle/scroll/jump, barre TAKE et sélection de sources viennent du composant ; le plugin ne fournit que les données (axes selon la vue) et les callbacks métier",
+        "Les deux vues « par flux » et « par signal » (BCP-002-01) sont conservées : le plugin construit des lignes/colonnes « signal » synthétiques (groupe V/A/ANC) et route en take groupé",
+        "Sélection de sources (clic en-tête, Maj+clic multi) + actions IS-05 Activer/Désactiver/Relancer via BT.Grid.selectionActions ; marqueur ⏻ (émission désactivée) en badge",
+        "Retrait de tout le rendu matriciel bespoke (ng-matrix) et de la sélection locale 0.2.3 — remplacés par le composant partagé. Nécessite BT.Grid dans le cœur (chargé par tool_focus/tool_section.html)"
+      ],
+      "fixes": [],
+      "known_bugs": [
+        "CSS bespoke .ng-matrix/.ng-take-bar devenu inutilisé (nettoyage ultérieur possible) — sans effet, BT.Grid apporte grid.css",
+        "Non testé au rendu navigateur dans l'environnement de dev : à vérifier au déploiement"
+      ]
+    },
+    {
+      "version": "0.2.3",
+      "published_at": "2026-07-05",
+      "changes": [
+        "Actions IS-05 sur les senders : Activer / Désactiver l'émission (master_enable, activation immédiate) et Relancer (désactive puis réactive — utile pour forcer un convertisseur à réémettre). N.B. « Relancer » ne rétablit PAS une émission absente pour cause d'entrée (pas de signal SDI / format non reconnu) : ne débloque qu'un sender coincé côté protocole",
+        "Sélection de senders par CLIC sur l'en-tête de colonne (1 sender en vue « par flux », groupe V/A/ANC en vue « par signal », toute la machine si repliée) ou sur l'en-tête de machine source (tous ses senders). La colonne sélectionnée est surlignée en entier (repérage de source), multi-sélection possible. Une barre propose Activer · Désactiver · Relancer · Vider, avec le compte",
+        "Marqueur ⏻ sur les colonnes dont l'émission est désactivée (master_enable=false)",
+        "API : POST /sender-enable {sender_keys:[…], enable:bool} et POST /bounce-group {sender_keys:[…]} (relance : désarme tout, une seule pause, réarme tout) ; client NMOS set_sender_enable()"
+      ],
+      "fixes": [
+        "La barre « préparer / TAKE » (et la nouvelle barre d'actions) restait affichée en permanence : base.css n'a pas de règle globale [hidden]{display:none}, donc .ng-take-bar{display:flex} l'emportait sur l'attribut hidden. Ajout de .ng-take-bar[hidden]{display:none}"
+      ],
+      "known_bugs": []
+    },
+    {
+      "version": "0.2.2",
+      "published_at": "2026-07-04",
+      "changes": [],
+      "fixes": [
+        "Croisement actif non détecté (« point » absent) quand le receiver est abonné via son transport_file (SDP) sans que le node recopie l'adresse dans transport_params.multicast_ip — cas de Bobi.Studio (2110-io) et de tout node qui ne réplique pas le SDP. La corrélation lit désormais le SDP en repli (c=/m=/a=source-filter) pour retrouver multicast:port:source"
+      ],
+      "known_bugs": []
+    },
     {
       "version": "0.2.1",
       "published_at": "2026-07-04",
