@@ -68,5 +68,20 @@
   "plugin.nmos_grid.snapReport": "Snapshot recall",
   "plugin.nmos_grid.ok": "ok",
   "plugin.nmos_grid.fail": "failure(s)",
-  "plugin.nmos_grid.disconnect2": "disconnect"
+  "plugin.nmos_grid.disconnect2": "disconnect",
+  "plugin.nmos_grid.senders": "sender(s)",
+  "plugin.nmos_grid.selectedN": "sender(s) selected",
+  "plugin.nmos_grid.clearSel": "Clear",
+  "plugin.nmos_grid.enable": "Enable",
+  "plugin.nmos_grid.disable": "Disable",
+  "plugin.nmos_grid.relaunch": "Relaunch emission",
+  "plugin.nmos_grid.emitOf": "the emission of",
+  "plugin.nmos_grid.emitOff": "emission disabled (master_enable=false)",
+  "plugin.nmos_grid.confirmRelaunch": "Relaunch emission (disable then re-enable) of",
+  "plugin.nmos_grid.selectMachine": "Click to select every sender of this device",
+  "plugin.nmos_grid.shiftHint": "Shift+click to (de)select several",
+  "plugin.nmos_grid.cornerBt": "dst ▸ / src ▾",
+  "plugin.nmos_grid.selectedSrc": "source(s) selected",
+  "plugin.nmos_grid.incompatible": "incompatible essences",
+  "plugin.nmos_grid.relaunchTitle": "Disables then re-enables emission (IS-05)"
 }

@@ -41,6 +41,45 @@ def _fmt_short(fmt):
     return str(fmt).rsplit(":", 1)[-1]
 
 
+def parse_sdp_legs(sdp):
+    """Extrait les legs d'un SDP (transportfile) : [{multicast_ip, dest_port, source_ip}].
+
+    Repli INDISPENSABLE pour les nodes qui abonnent un receiver via `transport_file` en
+    laissant `transport_params.multicast_ip` à null (cas de Bobi.Studio / 2110-io, et de tout
+    node qui ne recopie pas le SDP dans les transport_params). Sans ça, la corrélation multicast
+    de la grille échoue et le croisement n'apparaît pas.
+
+    Un leg par ligne `m=` (ST 2022-7 : primaire + secondaire). Pour chaque média :
+      - `dest_port` = 2e champ du `m=`
+      - `multicast_ip` = adresse du `c=IN IP4 <grp>[/ttl]` de la section (repli sur le `c=` de
+        session)
+      - `source_ip` = dernier token d'un `a=source-filter:incl IN IP4 <grp> <src>` (SSM)
+    """
+    if not sdp:
+        return []
+    session_c = None
+    legs, cur = [], None
+    for raw in str(sdp).splitlines():
+        ln = raw.strip()
+        if ln.startswith("c=IN IP4"):
+            addr = ln.split()[-1].split("/")[0]
+            if cur is None:
+                session_c = addr
+            elif not cur.get("multicast_ip"):
+                cur["multicast_ip"] = addr
+        elif ln.startswith("m="):
+            cur = {"multicast_ip": session_c, "dest_port": None, "source_ip": None}
+            parts = ln.split()
+            if len(parts) >= 2 and parts[1].isdigit():
+                cur["dest_port"] = int(parts[1])
+            legs.append(cur)
+        elif ln.startswith("a=source-filter") and cur is not None:
+            toks = ln.split()
+            if len(toks) >= 2:
+                cur["source_ip"] = toks[-1]
+    return [l for l in legs if l.get("multicast_ip")]
+
+
 GROUPHINT_TAG = "urn:x-nmos:tag:grouphint/v1.0"
 
 
@@ -155,6 +194,15 @@ class NmosNode:
         return self._req("GET", f"connection/{self.conn_ver()}/single/senders/{sid}/transportfile",
                          raw=True)
 
+    def set_sender_enable(self, sid, enable):
+        """PATCH staged d'un sender : arme/désarme l'émission (master_enable), activation
+        immédiate. ÉCRITURE : (dés)active l'émission 2110 réelle d'un équipement. Renvoie le
+        staged résultant."""
+        body = {"master_enable": bool(enable),
+                "activation": {"mode": "activate_immediate"}}
+        return self._req("PATCH",
+                         f"connection/{self.conn_ver()}/single/senders/{sid}/staged", body)
+
     # -- IS-05 : receivers ---------------------------------------------------------
 
     def receiver_active(self, rid):
@@ -165,11 +213,20 @@ class NmosNode:
         tf = d.get("transport_file") or {}
         legs = [{"multicast_ip": tp.get("multicast_ip"), "source_ip": tp.get("source_ip"),
                  "dest_port": tp.get("destination_port")} for tp in tps]
+        # Repli SDP : si aucun leg ne porte de multicast_ip (node qui abonne par transport_file
+        # sans recopier dans transport_params — ex. Bobi.Studio), on lit le SDP pour corréler.
+        if not any(l.get("multicast_ip") for l in legs):
+            sdp_legs = parse_sdp_legs(tf.get("data"))
+            if sdp_legs:
+                legs = sdp_legs
         tp0 = tps[0]
+        lead = legs[0] if legs else {}
         return {"master_enable": bool(d.get("master_enable")),
                 "sender_id": d.get("sender_id"),
-                "multicast_ip": tp0.get("multicast_ip"), "source_ip": tp0.get("source_ip"),
-                "dest_port": tp0.get("destination_port"), "interface_ip": tp0.get("interface_ip"),
+                "multicast_ip": tp0.get("multicast_ip") or lead.get("multicast_ip"),
+                "source_ip": tp0.get("source_ip") or lead.get("source_ip"),
+                "dest_port": tp0.get("destination_port") or lead.get("dest_port"),
+                "interface_ip": tp0.get("interface_ip"),
                 "has_sdp": bool(tf.get("data")), "legs": legs}
 
     def apply_sdp(self, rid, sdp, enable=True):

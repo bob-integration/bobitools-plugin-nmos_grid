@@ -68,5 +68,20 @@
   "plugin.nmos_grid.snapReport": "Rappel du snapshot",
   "plugin.nmos_grid.ok": "ok",
   "plugin.nmos_grid.fail": "échec(s)",
-  "plugin.nmos_grid.disconnect2": "déconnexion"
+  "plugin.nmos_grid.disconnect2": "déconnexion",
+  "plugin.nmos_grid.senders": "sender(s)",
+  "plugin.nmos_grid.selectedN": "sender(s) sélectionné(s)",
+  "plugin.nmos_grid.clearSel": "Vider",
+  "plugin.nmos_grid.enable": "Activer",
+  "plugin.nmos_grid.disable": "Désactiver",
+  "plugin.nmos_grid.relaunch": "Relancer l'émission",
+  "plugin.nmos_grid.emitOf": "l'émission de",
+  "plugin.nmos_grid.emitOff": "émission désactivée (master_enable=false)",
+  "plugin.nmos_grid.confirmRelaunch": "Relancer l'émission (désactiver puis réactiver) de",
+  "plugin.nmos_grid.selectMachine": "Cliquer pour sélectionner tous les senders de cet équipement",
+  "plugin.nmos_grid.shiftHint": "Maj+clic pour en (dé)sélectionner plusieurs",
+  "plugin.nmos_grid.cornerBt": "dst ▸ / src ▾",
+  "plugin.nmos_grid.selectedSrc": "source(s) sélectionnée(s)",
+  "plugin.nmos_grid.incompatible": "essences incompatibles",
+  "plugin.nmos_grid.relaunchTitle": "Désactive puis réactive l'émission (IS-05)"
 }

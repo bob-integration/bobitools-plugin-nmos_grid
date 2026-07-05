@@ -4,11 +4,12 @@
 // Distribué sous licence GNU GPL v3 (ou ultérieure) ; voir le fichier LICENSE.
 
 // UI de « Grille NMOS ». Front pur : toute la logique tourne dans le conteneur, atteinte via
-// ctx.api(...). Matrice X/Y (senders en colonnes, receivers en lignes) filtrable par essence,
-// machine et recherche libre. Deux VUES : « par flux » (un croisement par signal) et « par
-// signal » (BCP-002-01 : une colonne/ligne par groupe, take groupé). Repli par équipement,
-// favoris (machines épinglées), mode « câblées uniquement », TAKE, salvos et snapshots.
-// Les préférences d'affichage sont persistées en localStorage (clé préfixée par le type).
+// ctx.api(...). Le RENDU de la matrice est délégué au composant partagé window.BT.Grid
+// (static/js/bt-grid.js) : convention Bobi.Tools = SOURCES (senders) en LIGNES, DESTINATIONS
+// (receivers) en COLONNES. Ici on ne fait que : charger le parc, filtrer, construire les axes
+// selon la vue (« par flux » = 1 sender/receiver par ligne ; « par signal » = groupe V/A/ANC),
+// et brancher les callbacks métier (route/déconnexion/actions IS-05). Le repli/épingle/scroll,
+// la barre TAKE et la sélection de sources sont fournis par BT.Grid.
 window.BTTools = window.BTTools || {};
 window.BTTools.nmos_grid = (function () {
     "use strict";
@@ -18,27 +19,26 @@ window.BTTools.nmos_grid = (function () {
     let search = "";                    // recherche libre (NON persistée)
     let view = "flux";                  // "flux" | "signal"
     let wiredOnly = false;              // masque les destinations sans croisement actif
-    let directTake = false;             // TAKE direct : clic = route immédiate (sans préparer/confirmer)
-    let collapsedS = new Set();         // machine_key des colonnes (sources) repliées
-    let collapsedR = new Set();         // machine_key des lignes (destinations) repliées
-    let pinned = new Set();             // machine_key épinglées (en tête des deux axes)
-    let pending = null;                 // { kind:"single"|"group", ... }
+    let directTake = false;             // TAKE direct : clic = route immédiate (BT.Grid : sans barre TAKE)
     let pollTimer = null;
-    let curRows = [], curCols = [];     // descripteurs courants (résolution des clics par index)
+    let btGrid = null;                  // instance BT.Grid (mount une fois, setData ensuite)
 
     const esc = (s) => (window.BT && BT.esc ? BT.esc(s) : String(s == null ? "" : s));
     const tr = (key, fb) => { const v = ctx && ctx.t ? ctx.t(key) : null; return (v && v !== key) ? v : fb; };
     const $ = (sel) => root.querySelector(sel);
     const toast = (m, k) => ctx.toast(m, k);
+    const uniq = (a) => [...new Set(a)];
     const POLL_MS = 7000;
     const ESS_ORDER = { video: 0, audio: 1, data: 2 };
     const ESS_CHIP = { video: "V", audio: "A", data: "ANC" };
 
     // Normalisation pour la recherche : minuscules + suppression des accents.
-    const norm = (s) => (s == null ? "" : String(s)).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const norm = (s) => (s == null ? "" : String(s)).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
     // ── Persistance des préférences (localStorage, clé préfixée par le type) ──
+    // NB : repli/épingle sont désormais persistés par BT.Grid (persistKey ci-dessous).
     const PREF_KEY = () => "bt:" + (ctx && ctx.type ? ctx.type : "nmos_grid") + ":prefs";
+    const GRID_KEY = () => "bt:" + (ctx && ctx.type ? ctx.type : "nmos_grid") + ":grid";
     function loadPrefs() {
         let p = {};
         try { p = JSON.parse(window.localStorage.getItem(PREF_KEY()) || "{}") || {}; } catch (e) { p = {}; }
@@ -46,15 +46,11 @@ window.BTTools.nmos_grid = (function () {
         filters.essence = p.essence || ""; filters.machine = p.machine || "";
         wiredOnly = !!p.wiredOnly;
         directTake = !!p.directTake;
-        collapsedS = new Set(Array.isArray(p.collapsedS) ? p.collapsedS : []);
-        collapsedR = new Set(Array.isArray(p.collapsedR) ? p.collapsedR : []);
-        pinned = new Set(Array.isArray(p.pinned) ? p.pinned : []);
     }
     function savePrefs() {
         try {
             window.localStorage.setItem(PREF_KEY(), JSON.stringify({
-                view, essence: filters.essence, machine: filters.machine, wiredOnly, directTake,
-                collapsedS: [...collapsedS], collapsedR: [...collapsedR], pinned: [...pinned]
+                view, essence: filters.essence, machine: filters.machine, wiredOnly, directTake
             }));
         } catch (e) { /* quota / mode privé : on ignore */ }
     }
@@ -64,7 +60,6 @@ window.BTTools.nmos_grid = (function () {
         ctx = context; root = el;
         loadPrefs();
         applyI18n();
-        // reflète les préférences dans les contrôles
         $("#ng-f-view").value = view;
         $("#ng-f-essence").value = filters.essence;
         $("#ng-f-wired").checked = wiredOnly;
@@ -74,13 +69,12 @@ window.BTTools.nmos_grid = (function () {
         $("#ng-f-cancel").addEventListener("click", () => { $("#ng-form").hidden = true; });
         $("#ng-form").addEventListener("submit", onAddNode);
         $("#ng-search").addEventListener("input", (e) => { search = e.target.value || ""; renderGrid(); });
-        $("#ng-f-view").addEventListener("change", (e) => { view = e.target.value; savePrefs(); clearPending(); renderGrid(); });
+        $("#ng-f-view").addEventListener("change", (e) => { view = e.target.value; savePrefs(); renderGrid(); });
         $("#ng-f-essence").addEventListener("change", (e) => { filters.essence = e.target.value; savePrefs(); renderGrid(); });
         $("#ng-f-machine").addEventListener("change", (e) => { filters.machine = e.target.value; savePrefs(); renderGrid(); });
         $("#ng-f-wired").addEventListener("change", (e) => { wiredOnly = e.target.checked; savePrefs(); renderGrid(); });
-        $("#ng-f-direct").addEventListener("change", (e) => { directTake = e.target.checked; savePrefs(); clearPending(); renderGrid(); });
-        $("#ng-take-do").addEventListener("click", doTake);
-        $("#ng-take-cancel").addEventListener("click", clearPending);
+        // directTake pilote features.takeBar (figé au mount BT.Grid) → on remonte la grille
+        $("#ng-f-direct").addEventListener("change", (e) => { directTake = e.target.checked; savePrefs(); renderGrid(true); });
         $("#ng-salvo-new").addEventListener("click", newSalvo);
         $("#ng-snap-new").addEventListener("click", newSnapshot);
         refresh(true);
@@ -91,9 +85,9 @@ window.BTTools.nmos_grid = (function () {
 
     function unmount() {
         if (pollTimer) clearInterval(pollTimer);
-        ctx = root = null; pending = null;
+        if (btGrid) { try { btGrid.destroy(); } catch (e) { /* ignore */ } btGrid = null; }
+        ctx = root = null;
         grid = { senders: [], receivers: [], machines: [], simulated: false };
-        curRows = []; curCols = [];
     }
 
     function applyI18n() {
@@ -108,7 +102,7 @@ window.BTTools.nmos_grid = (function () {
         });
     }
 
-    // ── Chargement de la grille ──────────────────────────────
+    // ── Chargement du parc ───────────────────────────────────
     async function refresh(fresh) {
         let d;
         try { d = await ctx.api("grid" + (fresh ? "?fresh=1" : "")); }
@@ -117,9 +111,6 @@ window.BTTools.nmos_grid = (function () {
         grid = d || grid;
         $("#ng-sim").hidden = !grid.simulated;
         $("#ng-sim-hint").hidden = !grid.simulated;
-        if (pending) {                       // abandonne un préparé devenu caduc
-            if (pending.kind === "single" && !grid.receivers.some((r) => r.key === pending.receiver_key)) clearPending();
-        }
         renderMachineFilter();
         renderGrid();
     }
@@ -144,22 +135,7 @@ window.BTTools.nmos_grid = (function () {
     }
     function itemVisible(x) { return essenceOk(x) && machineOk(x) && searchOk(x); }
 
-    // ── Machines ordonnées (épinglées en tête), à partir d'items filtrés ──
-    function orderedMachines(items) {
-        const map = new Map();
-        items.forEach((it) => {
-            if (!map.has(it.machine_key)) map.set(it.machine_key, { machine_key: it.machine_key, name: it.machine, items: [] });
-            map.get(it.machine_key).items.push(it);
-        });
-        const list = [...map.values()];
-        // tri stable : épinglées d'abord, ordre d'origine préservé au sein de chaque groupe
-        return list.map((m, i) => [m, i]).sort((a, b) => {
-            const pa = pinned.has(a[0].machine_key) ? 0 : 1, pb = pinned.has(b[0].machine_key) ? 0 : 1;
-            return pa - pb || a[1] - b[1];
-        }).map((x) => x[0]);
-    }
-
-    // ── Descripteurs de colonnes / lignes selon la vue ───────
+    // ── Descripteurs selon la vue (flux = 1 item ; signal = groupe BCP-002-01) ──
     // Descripteur : { kind, members[], label, machine_key, essences[], groupName?, inferred? }
     function descsFor(items, side) {
         if (view === "flux") {
@@ -188,23 +164,8 @@ window.BTTools.nmos_grid = (function () {
         return out;
     }
 
-    function machineEssences(items) {
-        const out = [];
-        items.forEach((it) => { if (it.essence && out.indexOf(it.essence) < 0) out.push(it.essence); });
-        return out;
-    }
-
-    // « Croisements actifs cachés » d'une machine repliée (indicateur d'en-tête).
-    function senderMachineActive(mk) {
-        const keys = new Set((grid.senders || []).filter((s) => s.machine_key === mk).map((s) => s.key));
-        return (grid.receivers || []).some((r) => r.active_sender_key && keys.has(r.active_sender_key));
-    }
-    function receiverMachineActive(mk) {
-        return (grid.receivers || []).some((r) => r.machine_key === mk && r.active_sender_key);
-    }
-
     // ── Appariement des essences (identique au serveur) ──────
-    function roleKey(x) { const g = x.group || {}; return (g.role || "") + " " + (x.label || ""); }
+    function roleKey(x) { const g = x.group || {}; return (g.role || "") + " " + (x.label || ""); }
     function pairMembers(recvs, sends) {
         const br = {}, bs = {};
         recvs.forEach((r) => { (br[r.essence || ""] = br[r.essence || ""] || []).push(r); });
@@ -222,7 +183,7 @@ window.BTTools.nmos_grid = (function () {
         return { pairs, unmatched };
     }
 
-    // État d'un croisement (groupé ou non) : full / partial / none, calculé depuis /grid.
+    // État d'un croisement (groupé ou non) : full / partial / none.
     function cellState(rowMembers, colMembers) {
         const { pairs } = pairMembers(rowMembers, colMembers);
         let routed = 0;
@@ -235,299 +196,158 @@ window.BTTools.nmos_grid = (function () {
         return { state, pairs, anyActive, compatible: pairs.length > 0 };
     }
 
-    // ── Rendu de la matrice ──────────────────────────────────
+    // ── Construction des axes pour BT.Grid ───────────────────
+    function essenceBadges(d, isSource) {
+        const ess = d.kind === "group" ? d.essences
+            : (d.members[0] && d.members[0].essence ? [d.members[0].essence] : []);
+        const out = ess.slice()
+            .sort((a, b) => (ESS_ORDER[a] == null ? 9 : ESS_ORDER[a]) - (ESS_ORDER[b] == null ? 9 : ESS_ORDER[b]))
+            .map((e) => ({ label: ESS_CHIP[e] || e, cls: e }));
+        // marqueur ⏻ « émission désactivée » : uniquement côté source (sender), si tous off
+        if (isSource && d.members.length && d.members.every((s) => s.master_enable === false)) {
+            out.push({ label: "⏻", cls: "off" });
+        }
+        if (d.kind === "group" && d.inferred) out.push({ label: "≈", cls: "inferred" });
+        return out;
+    }
+    function descKey(d, prefix) {
+        return d.kind === "group" ? ("grp:" + prefix + ":" + d.machine_key + "|" + d.groupName)
+            : (d.members[0] && d.members[0].key);
+    }
+    function toAxisItem(d, isSource, prefix) {
+        return {
+            key: descKey(d, prefix),
+            label: d.label,
+            group: { key: d.machine_key, label: (d.members[0] && d.members[0].machine) || d.machine_key },
+            badge: essenceBadges(d, isSource),
+            active: !isSource && d.members.some((r) => r.active_sender_key),
+            _d: d,
+        };
+    }
+    function buildAxes() {
+        const sN = (grid.senders || []).filter(itemVisible);
+        const rN = (grid.receivers || []).filter(itemVisible);
+        const sources = descsFor(sN, "sender").map((d) => toAxisItem(d, true, "s"));
+        let destinations = descsFor(rN, "receiver").map((d) => toAxisItem(d, false, "r"));
+        if (wiredOnly) destinations = destinations.filter((x) => x.active);
+        return { sources, destinations };
+    }
+
     function emptyMsg() {
         return `<div class="ng-meta" style="padding:12px">${esc(tr("plugin.nmos_grid.empty",
             "Aucun sender ou receiver à afficher (parc vide, injoignable, ou filtré)."))}</div>`;
     }
 
-    function essChips(desc) {
-        if (desc.kind === "group" || desc.kind === "mcol") {
-            return (desc.essences || []).map((e) => `<span class="ng-ess ${esc(e)}">${esc(ESS_CHIP[e] || e)}</span>`).join("");
-        }
-        const e = desc.members[0] && desc.members[0].essence;
-        return e ? `<span class="ng-ess ${esc(e)}">${esc(e)}</span>` : "";
+    // ── Rendu : mount BT.Grid une fois, setData ensuite ──────
+    function cellFor(src, dst) {
+        const st = cellState(dst._d.members, src._d.members);   // rangée=receiver, colonne(source)=sender
+        return {
+            state: st.state === "full" ? "on" : (st.state === "partial" ? "partial" : "off"),
+            clickable: st.compatible,
+            title: st.compatible ? null : tr("plugin.nmos_grid.incompatible", "essences incompatibles"),
+        };
     }
 
-    function pinStar(mk) {
-        const on = pinned.has(mk);
-        return `<button class="ng-pin${on ? " on" : ""}" data-mk="${esc(mk)}" title="${esc(tr("plugin.nmos_grid.pin", "Épingler en tête"))}">${on ? "★" : "☆"}</button>`;
-    }
-    // Nom de machine CLIQUABLE : un clic replie/déplie l'équipement (le chevron n'est qu'un
-    // indicateur visuel — plus besoin de viser un petit triangle).
-    function mName(side, mk, name, collapsed) {
-        const title = esc(collapsed ? tr("plugin.nmos_grid.expand", "Déplier") : tr("plugin.nmos_grid.collapse", "Replier"));
-        return `<button class="ng-mname ng-mclick" type="button" data-side="${side}" data-mk="${esc(mk)}" title="${title}"><span class="ng-caret">${collapsed ? "▸" : "▾"}</span>${esc(name)}</button>`;
-    }
-    const hiddenDot = (on) => on ? `<span class="ng-hid" title="${esc(tr("plugin.nmos_grid.hiddenActive", "croisements actifs masqués"))}">●</span>` : "";
-
-    // Construit la liste des descripteurs de colonnes + les en-têtes de groupe (machines).
-    function buildCols() {
-        const senders = (grid.senders || []).filter(itemVisible);
-        const machines = orderedMachines(senders);
-        const cols = [], headGroups = [];
-        machines.forEach((m) => {
-            if (collapsedS.has(m.machine_key)) {
-                cols.push({ kind: "mcol", members: m.items, label: m.name, machine_key: m.machine_key,
-                    essences: machineEssences(m.items) });
-                headGroups.push({ machine_key: m.machine_key, name: m.name, span: 1, collapsed: true });
-            } else {
-                const ds = descsFor(m.items, "sender");
-                ds.forEach((d) => cols.push(d));
-                headGroups.push({ machine_key: m.machine_key, name: m.name, span: ds.length, collapsed: false });
-            }
-        });
-        return { cols, headGroups };
-    }
-
-    function renderCell(rd, c, ri, ci) {
-        const parked = rd.kind === "mcol" || c.kind === "mcol";
-        const st = cellState(rd.members, c.members);
-        let cls = "ng-cell ng-c-" + st.state;
-        if (parked) cls += " parked";
-        if (!parked && !st.compatible) cls += " disabled";
-        if (!parked && pendingMatches(rd, c)) cls += " pending";
-        const clickable = !parked && st.compatible;
-        if (clickable) cls += " clickable";
-        const attr = clickable ? ` data-ri="${ri}" data-ci="${ci}"` : "";
-        let mark = "";
-        if (st.state === "full") mark = "●";       // ●
-        else if (st.state === "partial") mark = "◐"; // ◐
-        return `<td class="${cls}"${attr}><span class="ng-dot">${mark}</span></td>`;
-    }
-
-    function rowDiscButton(rd, ri) {
-        const active = rd.members.some((r) => r.active_sender_key);
-        if (!active || rd.kind === "mcol") return "";
-        return `<button class="btn btn-red ng-disc" data-ri="${ri}" title="${esc(tr("plugin.nmos_grid.disconnect", "Déconnecter"))}">✕</button>`;
-    }
-
-    function renderRow(rd, cols, ri) {
-        let rowh;
-        if (rd.kind === "mcol") {                    // machine repliée : en-tête fin, ligne unique
-            rowh = `<th class="ng-row-h ng-row-mcol">
-                <div class="ng-rowh-flex"><div class="ng-mgrp">
-                  ${pinStar(rd.machine_key)}${mName("r", rd.machine_key, rd.label, true)}
-                  <span class="ng-meta">(${rd.members.length})</span>${hiddenDot(receiverMachineActive(rd.machine_key))}
-                </div></div></th>`;
+    async function routeSrcDst(src, dst) {
+        const rd = dst._d, cd = src._d;                         // receiver ◄ sender
+        if (rd.kind === "group" && cd.kind === "group") {
+            let d;
+            try {
+                d = await ctx.api("take-group", { method: "POST", body: {
+                    receiver_group: { machine_key: rd.machine_key, name: rd.groupName },
+                    sender_group: { machine_key: cd.machine_key, name: cd.groupName } } });
+            } catch (e) { toast(e.message, "error"); return; }
+            showReport(tr("plugin.nmos_grid.takeGroupReport", "Take groupé"), d);
         } else {
-            const sub = rd.kind === "group"
-                ? `<div class="ng-mac">${rd.inferred ? `<span class="ng-inferred" title="${esc(tr("plugin.nmos_grid.inferred", "groupe déduit du libellé"))}">≈</span> ` : ""}${rd.members.length} ${esc(tr("plugin.nmos_grid.signals", "signaux"))}</div>`
-                : "";
-            rowh = `<th class="ng-row-h"><div class="ng-rowh-flex"><div>
-                <div class="ng-cell-lbl">${esc(rd.label)}${essChips(rd)}</div>${sub}</div>
-                ${rowDiscButton(rd, ri)}</div></th>`;
+            const { pairs } = pairMembers(rd.members, cd.members);
+            if (!pairs.length) return;
+            const p = pairs[0];
+            if (p.r.active_sender_key === p.s.key) return;      // déjà actif
+            try { await ctx.api("take", { method: "POST", body: { receiver_key: p.r.key, sender_key: p.s.key } }); }
+            catch (e) { toast(e.message, "error"); return; }
+            toast(tr("plugin.nmos_grid.taken", "Croisement établi"), "success");
         }
-        let tds = "";
-        cols.forEach((c, ci) => { tds += renderCell(rd, c, ri, ci); });
-        return `<tr>${rowh}${tds}</tr>`;
+        refresh(true);
     }
 
-    function renderGrid() {
-        const wrap = $("#ng-grid-wrap");
-        const { cols, headGroups } = buildCols();
-        let recvItems = (grid.receivers || []).filter(itemVisible);
-        const rmachines = orderedMachines(recvItems);
+    async function disconnectDst(dst) {
+        const rd = dst._d;
+        if (rd.kind === "group") {
+            if (!window.confirm(`${tr("plugin.nmos_grid.confirmDiscGroup", "Déconnecter tout le groupe")} « ${rd.label} » ?`)) return;
+            let d;
+            try { d = await ctx.api("disconnect-group", { method: "POST", body: { receiver_group: { machine_key: rd.machine_key, name: rd.groupName } } }); }
+            catch (e) { toast(e.message, "error"); return; }
+            showReport(tr("plugin.nmos_grid.disconnectGroupReport", "Déconnexion groupée"), d);
+        } else {
+            const r = rd.members[0];
+            if (!window.confirm(`${tr("plugin.nmos_grid.confirmDisc", "Déconnecter")} « ${r ? r.label : "?"} » ?`)) return;
+            try { await ctx.api("disconnect", { method: "POST", body: { receiver_key: r.key } }); }
+            catch (e) { toast(e.message, "error"); return; }
+            toast(tr("plugin.nmos_grid.disconnected", "Destination déconnectée"), "success");
+        }
+        refresh(true);
+    }
+
+    // clés sender à partir des sources sélectionnées (déplie les groupes)
+    function srcKeysFrom(srcs) { return uniq((srcs || []).flatMap((s) => (s._d.members || []).map((m) => m.key)).filter(Boolean)); }
+
+    function renderGrid(remount) {
+        const host = $("#ng-grid-wrap");
         $("#ng-legend").hidden = !((grid.senders || []).length || (grid.receivers || []).length);
-        if (!cols.length || !rmachines.length) { wrap.innerHTML = emptyMsg(); curRows = []; curCols = []; return; }
-
-        curCols = cols;
-        curRows = [];
-        const totalCols = cols.length + 1;
-
-        // thead : ligne 1 = en-têtes de machine (sources), ligne 2 = colonnes (signaux/groupes)
-        let grpHead = `<tr><th class="ng-corner" rowspan="2"><span class="ng-meta">${esc(tr("plugin.nmos_grid.srcDst", "src ▸ / dst ▾"))}</span></th>`;
-        headGroups.forEach((h) => {
-            grpHead += `<th class="ng-grp-col-h" colspan="${h.span}"><div class="ng-mgrp">
-                ${pinStar(h.machine_key)}${mName("s", h.machine_key, h.name, h.collapsed)}${h.collapsed ? hiddenDot(senderMachineActive(h.machine_key)) : ""}
-            </div></th>`;
-        });
-        grpHead += "</tr>";
-        let colHead = "<tr>";
-        cols.forEach((c) => {
-            if (c.kind === "mcol") {
-                colHead += `<th class="ng-col-h ng-col-mcol" title="${esc(c.label)}"><div class="ng-cell-lbl">${c.members.length} ${esc(tr("plugin.nmos_grid.signals", "signaux"))}</div><div class="ng-mac">${essChips(c)}</div></th>`;
-            } else {
-                const sub = c.kind === "group"
-                    ? `<div class="ng-mac">${c.inferred ? `<span class="ng-inferred" title="${esc(tr("plugin.nmos_grid.inferred", "groupe déduit du libellé"))}">≈</span> ` : ""}${c.members.length} sig.</div>`
-                    : "";
-                colHead += `<th class="ng-col-h" title="${esc(c.label)}"><div class="ng-cell-lbl">${esc(c.label)}${essChips(c)}</div>${sub}</th>`;
-            }
-        });
-        colHead += "</tr>";
-
-        // tbody : pour chaque machine (destinations), en-tête de groupe puis ses lignes.
-        let body = "";
-        rmachines.forEach((m) => {
-            const collapsed = collapsedR.has(m.machine_key);
-            if (collapsed) {
-                if (wiredOnly && !receiverMachineActive(m.machine_key)) return;   // repliée & aucune active
-                const rd = { kind: "mcol", members: m.items, label: m.name, machine_key: m.machine_key,
-                    essences: machineEssences(m.items) };
-                const ri = curRows.length; curRows.push(rd);
-                body += renderRow(rd, cols, ri);
-                return;
-            }
-            let rds = descsFor(m.items, "receiver");
-            if (wiredOnly) rds = rds.filter((rd) => rd.members.some((r) => r.active_sender_key));
-            if (!rds.length) return;   // machine sans ligne visible → disparaît (en-tête compris)
-            body += `<tr class="ng-grp-row"><th class="ng-grp-row-h" colspan="${totalCols}"><span class="ng-mgrp">
-                ${pinStar(m.machine_key)}${mName("r", m.machine_key, m.name, false)}</span></th></tr>`;
-            rds.forEach((rd) => { const ri = curRows.length; curRows.push(rd); body += renderRow(rd, cols, ri); });
-        });
-        if (!body) { wrap.innerHTML = emptyMsg(); curRows = []; return; }
-
-        wrap.innerHTML = `<table class="ng-matrix"><thead>${grpHead}${colHead}</thead><tbody>${body}</tbody></table>`;
-        // aligne les colonnes collantes sous la ligne d'en-têtes de machine (hauteur mesurée)
-        const gh = wrap.querySelector(".ng-grp-col-h");
-        if (gh) wrap.style.setProperty("--ng-grp-h", gh.offsetHeight + "px");
-
-        wrap.querySelectorAll(".ng-cell.clickable").forEach((td) =>
-            td.addEventListener("click", () => onCellClick(+td.dataset.ri, +td.dataset.ci)));
-        wrap.querySelectorAll(".ng-disc").forEach((b) =>
-            b.addEventListener("click", (ev) => { ev.stopPropagation(); onDisconnect(+b.dataset.ri); }));
-        wrap.querySelectorAll(".ng-mclick").forEach((b) =>
-            b.addEventListener("click", (ev) => { ev.stopPropagation(); onToggleMachine(b.dataset.side, b.dataset.mk); }));
-        wrap.querySelectorAll(".ng-pin").forEach((b) =>
-            b.addEventListener("click", (ev) => { ev.stopPropagation(); onTogglePin(b.dataset.mk); }));
-    }
-
-    // ── Repli / favoris ──────────────────────────────────────
-    function onToggleMachine(side, mk) {
-        const set = side === "s" ? collapsedS : collapsedR;
-        if (set.has(mk)) set.delete(mk); else set.add(mk);
-        savePrefs(); renderGrid();
-    }
-    function onTogglePin(mk) {
-        if (pinned.has(mk)) pinned.delete(mk); else pinned.add(mk);
-        savePrefs(); renderGrid();
-    }
-
-    // ── Préparer / take (simple ou groupé) ───────────────────
-    function onCellClick(ri, ci) {
-        const rd = curRows[ri], c = curCols[ci];
-        if (!rd || !c || rd.kind === "mcol" || c.kind === "mcol") return;   // machine repliée = parké
-        const { pairs } = pairMembers(rd.members, c.members);
-        if (!pairs.length) return;
-        const grouped = rd.kind === "group" && c.kind === "group";
-        if (directTake) {                       // TAKE direct : on route sans préparer ni confirmer
-            if (grouped) directTakeGroup(rd, c);
-            else directTakeSingle(pairs[0].r, pairs[0].s);
+        const { sources, destinations } = buildAxes();
+        if (!sources.length || !destinations.length) {
+            if (btGrid) { btGrid.destroy(); btGrid = null; }
+            host.innerHTML = emptyMsg();
             return;
         }
-        if (grouped) prepareGroup(rd, c);
-        else prepareSingle(pairs[0].r, pairs[0].s);
+        if (remount && btGrid) { btGrid.destroy(); btGrid = null; }
+        if (btGrid) { btGrid.setData(sources, destinations); return; }
+        host.innerHTML = "";
+        btGrid = BT.Grid.mount(host, {
+            sources, destinations,
+            cell: cellFor, onRoute: routeSrcDst, onDisconnect: disconnectDst,
+            preparedText: (src, dst) => `${dst.label} · ${dst.group.label} ◄ ${src.label} · ${src.group.label}`,
+            features: { collapse: true, pin: true, jump: true, takeBar: !directTake, select: true },
+            selectionActions: [
+                { label: tr("plugin.nmos_grid.enable", "Activer"), cls: "btn-green",
+                  onClick: (k, srcs) => selEnable(srcKeysFrom(srcs), true) },
+                { label: tr("plugin.nmos_grid.disable", "Désactiver"),
+                  onClick: (k, srcs) => selEnable(srcKeysFrom(srcs), false) },
+                { label: tr("plugin.nmos_grid.relaunch", "Relancer l'émission"),
+                  title: tr("plugin.nmos_grid.relaunchTitle", "Désactive puis réactive l'émission (IS-05)"),
+                  onClick: (k, srcs) => selRelaunch(srcKeysFrom(srcs)) },
+            ],
+            labels: {
+                corner: tr("plugin.nmos_grid.cornerBt", "dst ▸ / src ▾"),
+                take: tr("plugin.nmos_grid.take", "TAKE"),
+                cancel: tr("plugin.nmos_grid.cancel", "Annuler"),
+                prepared: tr("plugin.nmos_grid.prepared", "Préparé :"),
+                selected: tr("plugin.nmos_grid.selectedSrc", "source(s) sélectionnée(s)"),
+                selHint: tr("plugin.nmos_grid.shiftHint", "Maj+clic pour en (dé)sélectionner plusieurs"),
+                clear: tr("plugin.nmos_grid.clearSel", "Vider"),
+            },
+            persistKey: GRID_KEY(),
+        });
     }
 
-    // ── TAKE direct (sans barre de préparation ni confirmation) ──
-    async function directTakeSingle(r, s) {
-        if (r.active_sender_key === s.key) return;   // croisement déjà actif : rien à faire
-        try { await ctx.api("take", { method: "POST", body: { receiver_key: r.key, sender_key: s.key } }); }
-        catch (e) { toast(e.message, "error"); return; }
-        toast(tr("plugin.nmos_grid.taken", "Croisement établi"), "success");
-        refresh(true);
-    }
-
-    async function directTakeGroup(rd, cd) {
+    // ── Actions IS-05 sur la sélection (Activer / Désactiver / Relancer) ──
+    async function selEnable(keys, enable) {
+        keys = uniq(keys || []); if (!keys.length) return;
+        const verb = enable ? tr("plugin.nmos_grid.enable", "Activer") : tr("plugin.nmos_grid.disable", "Désactiver");
+        if (!window.confirm(`${verb} ${tr("plugin.nmos_grid.emitOf", "l'émission de")} ${keys.length} ${tr("plugin.nmos_grid.senders", "sender(s)")} ?`)) return;
         let d;
-        try {
-            d = await ctx.api("take-group", { method: "POST", body: {
-                receiver_group: { machine_key: rd.machine_key, name: rd.groupName },
-                sender_group: { machine_key: cd.machine_key, name: cd.groupName } } });
-        } catch (e) { toast(e.message, "error"); return; }
-        showReport(tr("plugin.nmos_grid.takeGroupReport", "Take groupé"), d);
-        refresh(true);
-    }
-
-    function prepareSingle(r, s) {
-        if (r.active_sender_key === s.key) { clearPending(); return; }
-        if (pending && pending.kind === "single" && pending.receiver_key === r.key && pending.sender_key === s.key) { clearPending(); return; }
-        pending = { kind: "single", receiver_key: r.key, sender_key: s.key,
-            rLabel: r.label + " · " + r.machine, sLabel: s.label + " · " + s.machine };
-        renderPendingBar(); renderGrid();
-    }
-
-    function prepareGroup(rd, cd) {
-        if (pending && pending.kind === "group"
-            && pending.receiver_group.machine_key === rd.machine_key && pending.receiver_group.name === rd.groupName
-            && pending.sender_group.machine_key === cd.machine_key && pending.sender_group.name === cd.groupName) { clearPending(); return; }
-        pending = { kind: "group",
-            receiver_group: { machine_key: rd.machine_key, name: rd.groupName },
-            sender_group: { machine_key: cd.machine_key, name: cd.groupName },
-            rLabel: rd.label + " · " + rd.members[0].machine, sLabel: cd.label + " · " + cd.members[0].machine };
-        renderPendingBar(); renderGrid();
-    }
-
-    function pendingMatches(rd, c) {
-        if (!pending) return false;
-        if (pending.kind === "single") {
-            const { pairs } = pairMembers(rd.members, c.members);
-            return pairs.some((p) => p.r.key === pending.receiver_key && p.s.key === pending.sender_key);
-        }
-        return rd.kind === "group" && c.kind === "group"
-            && rd.machine_key === pending.receiver_group.machine_key && rd.groupName === pending.receiver_group.name
-            && c.machine_key === pending.sender_group.machine_key && c.groupName === pending.sender_group.name;
-    }
-
-    function renderPendingBar() {
-        const bar = $("#ng-take-bar");
-        if (!pending) { bar.hidden = true; return; }
-        bar.hidden = false;
-        const tag = pending.kind === "group" ? ` <span class="ng-grp-tag">${esc(tr("plugin.nmos_grid.grouped", "groupé"))}</span>` : "";
-        $("#ng-take-txt").innerHTML = `${esc(tr("plugin.nmos_grid.prepared", "Préparé :"))} ` +
-            `<strong>${esc(pending.rLabel)}</strong> ◄ <strong>${esc(pending.sLabel)}</strong>${tag}`;
-    }
-
-    function clearPending() {
-        pending = null;
-        if (root) { $("#ng-take-bar").hidden = true; renderGrid(); }
-    }
-
-    async function doTake() {
-        if (!pending) return;
-        if (pending.kind === "group") return doTakeGroup();
-        const msg = `${tr("plugin.nmos_grid.confirmTake", "Router")} « ${pending.sLabel} » → « ${pending.rLabel} » ?`;
-        if (!window.confirm(msg)) return;
-        try { await ctx.api("take", { method: "POST", body: { receiver_key: pending.receiver_key, sender_key: pending.sender_key } }); }
+        try { d = await ctx.api("sender-enable", { method: "POST", body: { sender_keys: keys, enable: enable } }); }
         catch (e) { toast(e.message, "error"); return; }
-        toast(tr("plugin.nmos_grid.taken", "Croisement établi"), "success");
-        clearPending();
+        showSenderReport(verb, d);
         refresh(true);
     }
-
-    async function doTakeGroup() {
-        const msg = `${tr("plugin.nmos_grid.confirmTakeGroup", "Router le signal (groupé)")} « ${pending.sLabel} » → « ${pending.rLabel} » ?`;
-        if (!window.confirm(msg)) return;
+    async function selRelaunch(keys) {
+        keys = uniq(keys || []); if (!keys.length) return;
+        if (!window.confirm(`${tr("plugin.nmos_grid.confirmRelaunch", "Relancer l'émission (désactiver puis réactiver) de")} ${keys.length} ${tr("plugin.nmos_grid.senders", "sender(s)")} ?`)) return;
         let d;
-        try { d = await ctx.api("take-group", { method: "POST", body: { receiver_group: pending.receiver_group, sender_group: pending.sender_group } }); }
+        try { d = await ctx.api("bounce-group", { method: "POST", body: { sender_keys: keys } }); }
         catch (e) { toast(e.message, "error"); return; }
-        showReport(tr("plugin.nmos_grid.takeGroupReport", "Take groupé"), d);
-        clearPending();
-        refresh(true);
-    }
-
-    // ── Déconnexion (simple ou groupée) ──────────────────────
-    function onDisconnect(ri) {
-        const rd = curRows[ri];
-        if (!rd) return;
-        if (rd.kind === "group") disconnectGroup(rd);
-        else disconnectSingle(rd.members[0]);
-    }
-
-    async function disconnectSingle(r) {
-        if (!window.confirm(`${tr("plugin.nmos_grid.confirmDisc", "Déconnecter")} « ${r ? r.label : "?"} » ?`)) return;
-        try { await ctx.api("disconnect", { method: "POST", body: { receiver_key: r.key } }); }
-        catch (e) { toast(e.message, "error"); return; }
-        toast(tr("plugin.nmos_grid.disconnected", "Destination déconnectée"), "success");
-        refresh(true);
-    }
-
-    async function disconnectGroup(rd) {
-        if (!window.confirm(`${tr("plugin.nmos_grid.confirmDiscGroup", "Déconnecter tout le groupe")} « ${rd.label} » ?`)) return;
-        let d;
-        try { d = await ctx.api("disconnect-group", { method: "POST", body: { receiver_group: { machine_key: rd.machine_key, name: rd.groupName } } }); }
-        catch (e) { toast(e.message, "error"); return; }
-        showReport(tr("plugin.nmos_grid.disconnectGroupReport", "Déconnexion groupée"), d);
+        showSenderReport(tr("plugin.nmos_grid.relaunch", "Relancer l'émission"), d);
         refresh(true);
     }
 
@@ -662,7 +482,7 @@ window.BTTools.nmos_grid = (function () {
         loadSnapshots();
     }
 
-    // ── Rapport succès / échec / pas de correspondance ───────
+    // ── Rapports ─────────────────────────────────────────────
     function showReport(title, d) {
         const box = $("#ng-report");
         box.hidden = false;
@@ -680,6 +500,22 @@ window.BTTools.nmos_grid = (function () {
                     ? esc(tr("plugin.nmos_grid.nomatch", "sans correspondance"))
                     : esc(r.sender_label || (r.sender_key ? r.sender_key : tr("plugin.nmos_grid.disconnect2", "déconnexion")));
                 return `<div class="ng-rep-line ${esc(st)}">${ico} ${esc(r.receiver_label || r.receiver_key)} ◄ ${src}${r.error ? " — " + esc(r.error) : ""}</div>`;
+            }).join("");
+    }
+
+    // Rapport orienté sender (Activer / Désactiver / Relancer).
+    function showSenderReport(title, d) {
+        const box = $("#ng-report"); box.hidden = false;
+        const results = (d && d.results) || [];
+        const ok = (d && d.ok_count) || 0, fail = (d && d.fail_count) || 0;
+        const summary = `${ok} ${tr("plugin.nmos_grid.ok", "ok")}, ${fail} ${tr("plugin.nmos_grid.fail", "échec(s)")}`;
+        toast(`${title} : ${summary}`, fail ? "error" : "success");
+        const labelOf = (sk) => { const s = (grid.senders || []).find((x) => x.key === sk); return s ? (s.label + " · " + s.machine) : sk; };
+        box.innerHTML = `<h4>${esc(title)} — ${esc(summary)}</h4>` +
+            results.map((r) => {
+                const st = r.status || (r.ok ? "ok" : "fail");
+                const ico = st === "ok" ? "✅" : "🔴";
+                return `<div class="ng-rep-line ${esc(st)}">${ico} ${esc(labelOf(r.sender_key))}${r.error ? " — " + esc(r.error) : ""}</div>`;
             }).join("");
     }
 

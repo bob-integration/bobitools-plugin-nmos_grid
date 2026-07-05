@@ -45,6 +45,9 @@
 /* Barre préparer / take */
 .ng-take-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
   border: 1px solid var(--accent); border-radius: var(--radius); background: var(--bg-soft); }
+/* base.css n'a pas de règle globale [hidden]{display:none} → sans ça, display:flex l'emporte
+   sur l'attribut `hidden` et la barre reste visible en permanence. */
+.ng-take-bar[hidden] { display: none; }
 .ng-take-txt { font-size: 13px; }
 .ng-take-txt strong { color: var(--accent); }
 
@@ -141,3 +144,25 @@ button.ng-mname:hover .ng-caret { color: var(--accent); }
 .ng-rep-line { font-size: 12.5px; padding: 2px 6px; border-left: 3px solid var(--border); }
 .ng-rep-line.ok { border-left-color: var(--status-running-fg); }
 .ng-rep-line.fail { border-left-color: var(--status-stopped-fg); color: var(--status-stopped-fg); }
+
+/* ── Sélection de senders par clic sur en-tête + actions IS-05 ── */
+.ng-selectable { cursor: pointer; user-select: none; -webkit-user-select: none; }
+.ng-col-h.ng-selectable:hover, .ng-grp-col-h.ng-selectable:hover { outline: 1px solid var(--accent); outline-offset: -1px; }
+/* en-tête sélectionné : liseré accent net */
+.ng-col-h.selected, .ng-grp-col-h.selected { box-shadow: inset 0 0 0 2px var(--accent); }
+/* toute la colonne surlignée (overlay translucide qui compose par-dessus l'état de la cellule) */
+.ng-cell.ng-col-sel, .ng-col-h.selected {
+  background-image: linear-gradient(rgba(120, 130, 255, 0.14), rgba(120, 130, 255, 0.14)); }
+/* marqueur « émission désactivée » */
+.ng-off { margin-left: 5px; color: var(--status-stopped-fg); font-size: 12px; }
+/* la barre de sélection reprend le style de la barre take, teinte neutre */
+.ng-sel-bar { border-color: var(--text-muted); }
+.ng-sel-bar .ng-take-txt { color: var(--text-muted); }
+
+/* ── Badges d'essence / état sur les en-têtes BT.Grid (source & destination) ──
+   BT.Grid rend <span class="btg-badge <cls>">. On reprend la palette des anciens .ng-ess. */
+.btg-badge.video { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
+.btg-badge.audio { background: transparent; border: 1px solid var(--status-running-fg); color: var(--status-running-fg); }
+.btg-badge.data  { background: transparent; border: 1px solid var(--status-warning-fg); color: var(--status-warning-fg); }
+.btg-badge.off      { background: transparent; border: 0; color: var(--status-stopped-fg); }  /* ⏻ émission désactivée */
+.btg-badge.inferred { background: transparent; border: 0; opacity: .7; }                        /* ≈ groupe déduit */

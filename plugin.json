@@ -2,7 +2,7 @@
   "license": "GPL-3.0-or-later",
   "type": "nmos_grid",
   "label": "Grille NMOS",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "runtime": "docker",
   "description": "Routeur logiciel ST 2110 par-dessus NMOS (IS-04 / IS-05) : une grille X/Y sources (senders) × destinations (receivers), lue en parcourant les nodes NMOS du parc (repris en lecture seule du parc « Convertisseurs Blackmagic », + nodes manuels). Un croisement actif = le receiver est abonné au sender (état détecté via IS-05 /active). TAKE d'un clic (transportfile SDP du sender → PATCH staged du receiver, activation immédiate), déconnexion, salvos nommés et snapshots du routage complet. Ergonomie d'affichage : vue « par flux » ou « par signal » (natural grouping BCP-002-01, grouphint + repli heuristique) avec take groupé, repli par équipement, favoris, recherche, mode « câblées uniquement ». Mode simulation intégré (parc démo) pour tester sans matériel.",
   "badge": { "label": "GRID", "class": "tool-nmosgrid", "oklch": "0.70 0.17 300" },
@@ -13,7 +13,7 @@
     "page_css": "page.css"
   },
   "docker": {
-    "image": "bobitool-nmos_grid:0.2.1",
+    "image": "bobitool-nmos_grid:0.3.0",
     "build": true,
     "port": 8080,
     "volume": "/data",
