@@ -76,11 +76,6 @@ window.BTTools.nmos_grid = (function () {
         $("#ng-f-wired").addEventListener("change", (e) => { wiredOnly = e.target.checked; savePrefs(); renderGrid(); });
         // directTake pilote features.takeBar (figé au mount BT.Grid) → on remonte la grille
         $("#ng-f-direct").addEventListener("change", (e) => { directTake = e.target.checked; savePrefs(); renderGrid(true); });
-        $("#ng-sdp-view").addEventListener("click", () => {
-            const sel = $("#ng-sdp-src");
-            viewSenderSdp(sel.value, sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : "");
-        });
-        $("#ng-sdp-apply").addEventListener("click", pasteSdp);
         $("#ng-salvo-new").addEventListener("click", newSalvo);
         $("#ng-snap-new").addEventListener("click", newSnapshot);
         refresh(true);
@@ -119,7 +114,6 @@ window.BTTools.nmos_grid = (function () {
         $("#ng-sim").hidden = !grid.simulated;
         $("#ng-sim-hint").hidden = !grid.simulated;
         renderMachineFilter();
-        renderSdpSelectors();
         renderGrid();
     }
 
@@ -314,6 +308,14 @@ window.BTTools.nmos_grid = (function () {
         btGrid = BT.Grid.mount(host, {
             sources, destinations,
             cell: cellFor, onRoute: routeSrcDst, onDisconnect: disconnectDst,
+            destinationActions: [
+                { label: tr("plugin.nmos_grid.sdp.viewDst", "Voir SDP"),
+                  title: tr("plugin.nmos_grid.sdp.viewDstTitle", "Afficher le SDP courant de la destination"),
+                  onClick: (dst) => viewReceiverSdp(dst) },
+                { label: tr("plugin.nmos_grid.sdp.pasteAction", "Coller un SDP"),
+                  title: tr("plugin.nmos_grid.sdp.pasteTitle", "Coller un SDP et abonner la destination"),
+                  onClick: (dst) => pasteReceiverSdp(dst) },
+            ],
             preparedText: (src, dst) => `${dst.label} · ${dst.group.label} ◄ ${src.label} · ${src.group.label}`,
             features: { collapse: true, pin: true, jump: true, takeBar: !directTake, select: true },
             selectionActions: [
@@ -394,21 +396,13 @@ window.BTTools.nmos_grid = (function () {
         }));
     }
 
-    // ── SDP : voir une source / coller dans une destination ──
-    // Les SDP sont par flux UNITAIRE (un sender / un receiver), pas par groupe : on peuple les
-    // sélecteurs à plat depuis la grille courante, triés par machine puis libellé.
-    const byMachineLabel = (a, b) =>
-        (a.machine + " " + a.label < b.machine + " " + b.label ? -1 : 1);
-
-    function renderSdpSelectors() {
-        const srcSel = $("#ng-sdp-src"), dstSel = $("#ng-sdp-dst");
-        if (!srcSel || !dstSel) return;
-        const opt = (x) => `<option value="${esc(x.key)}">${esc(x.label)} · ${esc(x.machine)}</option>`;
-        const sPrev = srcSel.value, dPrev = dstSel.value;
-        srcSel.innerHTML = (grid.senders || []).slice().sort(byMachineLabel).map(opt).join("");
-        dstSel.innerHTML = (grid.receivers || []).slice().sort(byMachineLabel).map(opt).join("");
-        if (sPrev) srcSel.value = sPrev;
-        if (dPrev) dstSel.value = dPrev;
+    // ── SDP : voir une source / voir+coller une destination ──
+    // Un SDP est par flux UNITAIRE. On extrait le membre unitaire d'un descripteur d'axe (en vue
+    // « par signal », un groupe V/A/ANC en porte plusieurs → on prend le 1er et on le signale).
+    function firstMember(d, kind) {
+        const members = (d && d._d && d._d.members) || [];
+        if (members.length > 1) toast(tr("plugin.nmos_grid.sdp." + kind, ""), "info");
+        return members[0] || null;
     }
 
     async function viewSenderSdp(key, label) {
@@ -419,21 +413,23 @@ window.BTTools.nmos_grid = (function () {
         showSdpModal(label || tr("plugin.nmos_grid.sdp.title", "SDP"), d.sdp || "");
     }
 
-    async function pasteSdp() {
-        const dstSel = $("#ng-sdp-dst");
-        const key = dstSel.value, sdp = $("#ng-sdp-text").value;
-        if (!key) { toast(tr("plugin.nmos_grid.sdp.noDst", "Choisissez une destination"), "error"); return; }
-        if (!sdp.trim()) { toast(tr("plugin.nmos_grid.sdp.noSdp", "Collez un SDP"), "error"); return; }
-        const dstLabel = dstSel.selectedOptions[0] ? dstSel.selectedOptions[0].textContent : key;
-        if (!window.confirm(`${tr("plugin.nmos_grid.sdp.confirm", "Coller ce SDP et activer")} « ${dstLabel} » ?`)) return;
-        try { await ctx.api("apply-sdp", { method: "POST", body: { receiver_key: key, sdp } }); }
+    async function viewReceiverSdp(dst) {
+        const r = firstMember(dst, "firstDst");
+        if (!r) return;
+        let d;
+        try { d = await ctx.api("receiver-sdp?receiver_key=" + encodeURIComponent(r.key)); }
         catch (e) { toast(e.message, "error"); return; }
-        toast(tr("plugin.nmos_grid.sdp.applied", "SDP appliqué (activation immédiate)"), "success");
-        $("#ng-sdp-text").value = "";
-        refresh(true);
+        showSdpModal(`${r.label} · ${r.machine}`, d.sdp || "");
     }
 
-    // ── Modale d'affichage d'un SDP (copier / télécharger) ──
+    // Coller un SDP dans une destination : modale avec textarea + « Coller & activer ».
+    function pasteReceiverSdp(dst) {
+        const r = firstMember(dst, "firstDst");
+        if (!r) return;
+        showPasteModal(r.key, `${r.label} · ${r.machine}`);
+    }
+
+    // ── Modales SDP (affichage copier/télécharger, et collage) ──
     function closeSdpModal() {
         const m = root && root.querySelector(".ng-modal");
         if (m) m.remove();
@@ -461,6 +457,41 @@ window.BTTools.nmos_grid = (function () {
         root.appendChild(ov);
         sdpEsc = (e) => { if (e.key === "Escape") closeSdpModal(); };
         document.addEventListener("keydown", sdpEsc);
+    }
+
+    function showPasteModal(recvKey, recvLabel) {
+        closeSdpModal();
+        if (!root) return;
+        const ov = document.createElement("div");
+        ov.className = "ng-modal";
+        ov.innerHTML = `<div class="ng-modal-box">
+            <div class="ng-modal-head">
+              <h4>${esc(tr("plugin.nmos_grid.sdp.pasteInto", "Coller un SDP dans"))} ${esc(recvLabel)}</h4>
+              <span class="ng-spacer"></span>
+              <button class="btn btn-red" data-a="close">✕</button>
+            </div>
+            <textarea class="ng-sdp-text" spellcheck="false"></textarea>
+            <div class="ng-form-actions">
+              <button class="btn btn-green" data-a="apply">${esc(tr("plugin.nmos_grid.sdp.apply", "Coller & activer"))}</button>
+            </div></div>`;
+        const ta = ov.querySelector("textarea");
+        ta.placeholder = tr("plugin.nmos_grid.sdp.pastePh", "Collez ici le SDP (transportfile) à appliquer sur la destination…");
+        ov.addEventListener("click", (e) => { if (e.target === ov) closeSdpModal(); });
+        ov.querySelector('[data-a="close"]').addEventListener("click", closeSdpModal);
+        ov.querySelector('[data-a="apply"]').addEventListener("click", async () => {
+            const sdp = ta.value;
+            if (!sdp.trim()) { toast(tr("plugin.nmos_grid.sdp.noSdp", "Collez un SDP"), "error"); return; }
+            if (!window.confirm(`${tr("plugin.nmos_grid.sdp.confirm", "Coller ce SDP et activer")} « ${recvLabel} » ?`)) return;
+            try { await ctx.api("apply-sdp", { method: "POST", body: { receiver_key: recvKey, sdp } }); }
+            catch (e) { toast(e.message, "error"); return; }
+            toast(tr("plugin.nmos_grid.sdp.applied", "SDP appliqué (activation immédiate)"), "success");
+            closeSdpModal();
+            refresh(true);
+        });
+        root.appendChild(ov);
+        sdpEsc = (e) => { if (e.key === "Escape") closeSdpModal(); };
+        document.addEventListener("keydown", sdpEsc);
+        ta.focus();
     }
 
     function copyText(t) {

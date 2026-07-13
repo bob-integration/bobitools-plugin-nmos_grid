@@ -85,10 +85,13 @@
   "plugin.nmos_grid.incompatible": "essences incompatibles",
   "plugin.nmos_grid.relaunchTitle": "Désactive puis réactive l'émission (IS-05)",
   "plugin.nmos_grid.sdp.title": "SDP",
-  "plugin.nmos_grid.sdp.viewSrc": "Voir le SDP d'une source",
-  "plugin.nmos_grid.sdp.pasteDst": "Coller un SDP dans une destination",
-  "plugin.nmos_grid.sdp.view": "Afficher",
+  "plugin.nmos_grid.sdp.view": "Voir SDP",
   "plugin.nmos_grid.sdp.viewTitle": "Afficher le SDP de la source sélectionnée",
+  "plugin.nmos_grid.sdp.viewDst": "Voir SDP",
+  "plugin.nmos_grid.sdp.viewDstTitle": "Afficher le SDP courant de la destination",
+  "plugin.nmos_grid.sdp.pasteAction": "Coller un SDP",
+  "plugin.nmos_grid.sdp.pasteTitle": "Coller un SDP et abonner la destination",
+  "plugin.nmos_grid.sdp.pasteInto": "Coller un SDP dans",
   "plugin.nmos_grid.sdp.apply": "Coller & activer",
   "plugin.nmos_grid.sdp.pastePh": "Collez ici le SDP (transportfile) à appliquer sur la destination…",
   "plugin.nmos_grid.sdp.copy": "Copier",
@@ -98,7 +101,7 @@
   "plugin.nmos_grid.sdp.confirm": "Coller ce SDP et activer",
   "plugin.nmos_grid.sdp.applied": "SDP appliqué (activation immédiate)",
   "plugin.nmos_grid.sdp.noSrc": "Choisissez une source",
-  "plugin.nmos_grid.sdp.noDst": "Choisissez une destination",
   "plugin.nmos_grid.sdp.noSdp": "Collez un SDP",
-  "plugin.nmos_grid.sdp.firstOnly": "SDP de la 1re source sélectionnée"
+  "plugin.nmos_grid.sdp.firstOnly": "SDP de la 1re source sélectionnée",
+  "plugin.nmos_grid.sdp.firstDst": "SDP de la 1re destination du groupe"
 }

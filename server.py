@@ -616,6 +616,26 @@ def sender_sdp_for(sender_key):
     return sdp
 
 
+def receiver_sdp_for(receiver_key):
+    """SDP (transport_file) COURANT d'un receiver — ce à quoi il est abonné. LECTURE seule.
+    Erreur claire si la destination ne porte aucun SDP (non abonnée)."""
+    if is_sim():
+        sk = load_sim_routing().get(receiver_key)
+        m, s = _sim_sender(sk) if sk else (None, None)
+        if not s:
+            raise NmosError("destination non abonnée (aucun SDP chargé)")
+        return _synth_sim_sdp(m, s)
+    nodes = {n["node_key"]: n for n in all_nodes()}
+    rnk, rid = _split_key(receiver_key)
+    rn = nodes.get(rnk)
+    if not rn:
+        raise NmosError("receiver introuvable dans le parc")
+    sdp = NmosNode(rn["host"], rn["port"]).receiver_sdp(rid)
+    if not (sdp or "").strip():
+        raise NmosError("la destination n'a pas de SDP chargé (non abonnée)")
+    return sdp
+
+
 def apply_sdp_to_receiver(receiver_key, sdp):
     """Colle un SDP ARBITRAIRE sur un receiver (PATCH staged + activation immédiate). ÉCRITURE :
     abonne l'équipement au flux décrit par le SDP fourni, hors grille des senders connus."""
@@ -868,6 +888,14 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(400, {"error": "sender_key requis"})
                 try:
                     return self._send(200, {"sdp": sender_sdp_for(sk)})
+                except NmosError as e:
+                    return self._send(502, {"error": str(e)})
+            if parts == ["receiver-sdp"]:
+                rk = q.get("receiver_key")
+                if not rk:
+                    return self._send(400, {"error": "receiver_key requis"})
+                try:
+                    return self._send(200, {"sdp": receiver_sdp_for(rk)})
                 except NmosError as e:
                     return self._send(502, {"error": str(e)})
             if parts == ["salvos"]:
