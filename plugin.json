@@ -13,7 +13,7 @@
     "page_css": "page.css"
   },
   "docker": {
-    "image": "bobitool-nmos_grid:0.3.0",
+    "image": "bobitool-nmos_grid:0.4.0",
     "build": true,
     "port": 8080,
     "volume": "/data",
