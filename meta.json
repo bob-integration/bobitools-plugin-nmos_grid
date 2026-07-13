@@ -1,6 +1,20 @@
 {
-  "current": "0.3.0",
+  "current": "0.4.0",
   "versions": [
+    {
+      "version": "0.4.0",
+      "published_at": "2026-07-13",
+      "changes": [
+        "Panneau « SDP » : afficher le transportfile (SDP) d'une source (modale avec copier / télécharger) et COLLER un SDP arbitraire dans une destination (PATCH staged du receiver + activation immédiate, hors grille des senders connus). Utile pour abonner un receiver à un flux non présent dans le parc, ou récupérer le SDP d'un sender (ex. flux audio des convertisseurs Blackmagic) via IS-05 transportfile.",
+        "Action « Voir SDP » ajoutée à la barre de sélection de sources (BT.Grid.selectionActions) — accès direct au SDP depuis la grille.",
+        "Backend : routes GET /sender-sdp (sender_key → transportfile) et POST /apply-sdp (receiver_key + sdp). En mode simulation, SDP synthétique par source et collage rapproché du sender démo par multicast, pour exercer la fonction sans matériel.",
+        "Rappel opérationnel : le SDP des convertisseurs Blackmagic se lit via l'IS-05 transportfile sur l'IP de MANAGEMENT ; leur manifest_href pointe l'IP média (souvent non routée) et échoue."
+      ],
+      "fixes": [],
+      "known_bugs": [
+        "Collage d'un SDP en simulation : ne route que si le multicast correspond à un sender du parc démo (le modèle simulé ne représente pas d'abonnement hors parc)."
+      ]
+    },
     {
       "version": "0.3.0",
       "published_at": "2026-07-05",

@@ -83,5 +83,22 @@
   "plugin.nmos_grid.cornerBt": "dst ▸ / src ▾",
   "plugin.nmos_grid.selectedSrc": "source(s) selected",
   "plugin.nmos_grid.incompatible": "incompatible essences",
-  "plugin.nmos_grid.relaunchTitle": "Disables then re-enables emission (IS-05)"
+  "plugin.nmos_grid.relaunchTitle": "Disables then re-enables emission (IS-05)",
+  "plugin.nmos_grid.sdp.title": "SDP",
+  "plugin.nmos_grid.sdp.viewSrc": "View a source's SDP",
+  "plugin.nmos_grid.sdp.pasteDst": "Paste an SDP into a destination",
+  "plugin.nmos_grid.sdp.view": "Show",
+  "plugin.nmos_grid.sdp.viewTitle": "Show the selected source's SDP",
+  "plugin.nmos_grid.sdp.apply": "Paste & activate",
+  "plugin.nmos_grid.sdp.pastePh": "Paste here the SDP (transport file) to apply on the destination…",
+  "plugin.nmos_grid.sdp.copy": "Copy",
+  "plugin.nmos_grid.sdp.copied": "SDP copied",
+  "plugin.nmos_grid.sdp.copyFail": "Copy failed",
+  "plugin.nmos_grid.sdp.download": "Download",
+  "plugin.nmos_grid.sdp.confirm": "Paste this SDP and activate",
+  "plugin.nmos_grid.sdp.applied": "SDP applied (immediate activation)",
+  "plugin.nmos_grid.sdp.noSrc": "Pick a source",
+  "plugin.nmos_grid.sdp.noDst": "Pick a destination",
+  "plugin.nmos_grid.sdp.noSdp": "Paste an SDP",
+  "plugin.nmos_grid.sdp.firstOnly": "SDP of the 1st selected source"
 }

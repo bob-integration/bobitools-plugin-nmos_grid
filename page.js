@@ -22,6 +22,7 @@ window.BTTools.nmos_grid = (function () {
     let directTake = false;             // TAKE direct : clic = route immédiate (BT.Grid : sans barre TAKE)
     let pollTimer = null;
     let btGrid = null;                  // instance BT.Grid (mount une fois, setData ensuite)
+    let sdpEsc = null;                  // handler Échap de la modale SDP (retiré à la fermeture)
 
     const esc = (s) => (window.BT && BT.esc ? BT.esc(s) : String(s == null ? "" : s));
     const tr = (key, fb) => { const v = ctx && ctx.t ? ctx.t(key) : null; return (v && v !== key) ? v : fb; };
@@ -75,6 +76,11 @@ window.BTTools.nmos_grid = (function () {
         $("#ng-f-wired").addEventListener("change", (e) => { wiredOnly = e.target.checked; savePrefs(); renderGrid(); });
         // directTake pilote features.takeBar (figé au mount BT.Grid) → on remonte la grille
         $("#ng-f-direct").addEventListener("change", (e) => { directTake = e.target.checked; savePrefs(); renderGrid(true); });
+        $("#ng-sdp-view").addEventListener("click", () => {
+            const sel = $("#ng-sdp-src");
+            viewSenderSdp(sel.value, sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : "");
+        });
+        $("#ng-sdp-apply").addEventListener("click", pasteSdp);
         $("#ng-salvo-new").addEventListener("click", newSalvo);
         $("#ng-snap-new").addEventListener("click", newSnapshot);
         refresh(true);
@@ -85,6 +91,7 @@ window.BTTools.nmos_grid = (function () {
 
     function unmount() {
         if (pollTimer) clearInterval(pollTimer);
+        closeSdpModal();
         if (btGrid) { try { btGrid.destroy(); } catch (e) { /* ignore */ } btGrid = null; }
         ctx = root = null;
         grid = { senders: [], receivers: [], machines: [], simulated: false };
@@ -112,6 +119,7 @@ window.BTTools.nmos_grid = (function () {
         $("#ng-sim").hidden = !grid.simulated;
         $("#ng-sim-hint").hidden = !grid.simulated;
         renderMachineFilter();
+        renderSdpSelectors();
         renderGrid();
     }
 
@@ -309,6 +317,14 @@ window.BTTools.nmos_grid = (function () {
             preparedText: (src, dst) => `${dst.label} · ${dst.group.label} ◄ ${src.label} · ${src.group.label}`,
             features: { collapse: true, pin: true, jump: true, takeBar: !directTake, select: true },
             selectionActions: [
+                { label: tr("plugin.nmos_grid.sdp.view", "Voir SDP"),
+                  title: tr("plugin.nmos_grid.sdp.viewTitle", "Afficher le SDP de la source sélectionnée"),
+                  onClick: (k, srcs) => {
+                      const keys = srcKeysFrom(srcs);
+                      if (!keys.length) return;
+                      if (keys.length > 1) toast(tr("plugin.nmos_grid.sdp.firstOnly", "SDP de la 1re source sélectionnée"), "info");
+                      const s = (grid.senders || []).find((x) => x.key === keys[0]);
+                      viewSenderSdp(keys[0], s ? `${s.label} · ${s.machine}` : ""); } },
                 { label: tr("plugin.nmos_grid.enable", "Activer"), cls: "btn-green",
                   onClick: (k, srcs) => selEnable(srcKeysFrom(srcs), true) },
                 { label: tr("plugin.nmos_grid.disable", "Désactiver"),
@@ -376,6 +392,94 @@ window.BTTools.nmos_grid = (function () {
             try { await ctx.api("nodes/" + b.dataset.id, { method: "DELETE" }); } catch (e) { toast(e.message, "error"); return; }
             renderManual(); refresh(true);
         }));
+    }
+
+    // ── SDP : voir une source / coller dans une destination ──
+    // Les SDP sont par flux UNITAIRE (un sender / un receiver), pas par groupe : on peuple les
+    // sélecteurs à plat depuis la grille courante, triés par machine puis libellé.
+    const byMachineLabel = (a, b) =>
+        (a.machine + " " + a.label < b.machine + " " + b.label ? -1 : 1);
+
+    function renderSdpSelectors() {
+        const srcSel = $("#ng-sdp-src"), dstSel = $("#ng-sdp-dst");
+        if (!srcSel || !dstSel) return;
+        const opt = (x) => `<option value="${esc(x.key)}">${esc(x.label)} · ${esc(x.machine)}</option>`;
+        const sPrev = srcSel.value, dPrev = dstSel.value;
+        srcSel.innerHTML = (grid.senders || []).slice().sort(byMachineLabel).map(opt).join("");
+        dstSel.innerHTML = (grid.receivers || []).slice().sort(byMachineLabel).map(opt).join("");
+        if (sPrev) srcSel.value = sPrev;
+        if (dPrev) dstSel.value = dPrev;
+    }
+
+    async function viewSenderSdp(key, label) {
+        if (!key) { toast(tr("plugin.nmos_grid.sdp.noSrc", "Choisissez une source"), "error"); return; }
+        let d;
+        try { d = await ctx.api("sender-sdp?sender_key=" + encodeURIComponent(key)); }
+        catch (e) { toast(e.message, "error"); return; }
+        showSdpModal(label || tr("plugin.nmos_grid.sdp.title", "SDP"), d.sdp || "");
+    }
+
+    async function pasteSdp() {
+        const dstSel = $("#ng-sdp-dst");
+        const key = dstSel.value, sdp = $("#ng-sdp-text").value;
+        if (!key) { toast(tr("plugin.nmos_grid.sdp.noDst", "Choisissez une destination"), "error"); return; }
+        if (!sdp.trim()) { toast(tr("plugin.nmos_grid.sdp.noSdp", "Collez un SDP"), "error"); return; }
+        const dstLabel = dstSel.selectedOptions[0] ? dstSel.selectedOptions[0].textContent : key;
+        if (!window.confirm(`${tr("plugin.nmos_grid.sdp.confirm", "Coller ce SDP et activer")} « ${dstLabel} » ?`)) return;
+        try { await ctx.api("apply-sdp", { method: "POST", body: { receiver_key: key, sdp } }); }
+        catch (e) { toast(e.message, "error"); return; }
+        toast(tr("plugin.nmos_grid.sdp.applied", "SDP appliqué (activation immédiate)"), "success");
+        $("#ng-sdp-text").value = "";
+        refresh(true);
+    }
+
+    // ── Modale d'affichage d'un SDP (copier / télécharger) ──
+    function closeSdpModal() {
+        const m = root && root.querySelector(".ng-modal");
+        if (m) m.remove();
+        if (sdpEsc) { document.removeEventListener("keydown", sdpEsc); sdpEsc = null; }
+    }
+
+    function showSdpModal(title, sdp) {
+        closeSdpModal();
+        if (!root) return;
+        const ov = document.createElement("div");
+        ov.className = "ng-modal";
+        ov.innerHTML = `<div class="ng-modal-box">
+            <div class="ng-modal-head">
+              <h4>${esc(title)}</h4><span class="ng-spacer"></span>
+              <button class="btn" data-a="copy">${esc(tr("plugin.nmos_grid.sdp.copy", "Copier"))}</button>
+              <button class="btn" data-a="dl">${esc(tr("plugin.nmos_grid.sdp.download", "Télécharger"))}</button>
+              <button class="btn btn-red" data-a="close">✕</button>
+            </div>
+            <pre class="ng-modal-pre"></pre></div>`;
+        ov.querySelector(".ng-modal-pre").textContent = sdp;     // textContent : aucune injection
+        ov.addEventListener("click", (e) => { if (e.target === ov) closeSdpModal(); });
+        ov.querySelector('[data-a="close"]').addEventListener("click", closeSdpModal);
+        ov.querySelector('[data-a="copy"]').addEventListener("click", () => copyText(sdp));
+        ov.querySelector('[data-a="dl"]').addEventListener("click", () => downloadSdp(title, sdp));
+        root.appendChild(ov);
+        sdpEsc = (e) => { if (e.key === "Escape") closeSdpModal(); };
+        document.addEventListener("keydown", sdpEsc);
+    }
+
+    function copyText(t) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(t).then(
+                () => toast(tr("plugin.nmos_grid.sdp.copied", "SDP copié"), "success"),
+                () => toast(tr("plugin.nmos_grid.sdp.copyFail", "Copie impossible"), "error"));
+        } else { toast(tr("plugin.nmos_grid.sdp.copyFail", "Copie impossible"), "error"); }
+    }
+
+    function slugify(s) { return norm(s).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "sdp"; }
+
+    function downloadSdp(title, sdp) {
+        const blob = new Blob([sdp], { type: "application/sdp" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = slugify(title) + ".sdp";
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     // ── Salvos ───────────────────────────────────────────────
