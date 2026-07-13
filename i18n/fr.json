@@ -87,6 +87,7 @@
   "plugin.nmos_grid.sdp.title": "SDP",
   "plugin.nmos_grid.sdp.view": "Voir SDP",
   "plugin.nmos_grid.sdp.viewTitle": "Afficher le SDP de la source sélectionnée",
+  "plugin.nmos_grid.sdp.dstBar": "Destination :",
   "plugin.nmos_grid.sdp.viewDst": "Voir SDP",
   "plugin.nmos_grid.sdp.viewDstTitle": "Afficher le SDP courant de la destination",
   "plugin.nmos_grid.sdp.pasteAction": "Coller un SDP",

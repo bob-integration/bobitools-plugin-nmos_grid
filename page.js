@@ -343,6 +343,7 @@ window.BTTools.nmos_grid = (function () {
                 selected: tr("plugin.nmos_grid.selectedSrc", "source(s) sélectionnée(s)"),
                 selHint: tr("plugin.nmos_grid.shiftHint", "Maj+clic pour en (dé)sélectionner plusieurs"),
                 clear: tr("plugin.nmos_grid.clearSel", "Vider"),
+                destination: tr("plugin.nmos_grid.sdp.dstBar", "Destination :"),
             },
             persistKey: GRID_KEY(),
         });

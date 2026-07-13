@@ -5,9 +5,9 @@
       "version": "0.5.0",
       "published_at": "2026-07-13",
       "changes": [
-        "SDP porté DANS la grille, symétrique source/destination : menu « ⋯ » par destination (colonne) → « Voir SDP » (transport_file COURANT du receiver, via nouvelle route GET /receiver-sdp) et « Coller un SDP » (modale textarea → apply-sdp). Côté source, « Voir SDP » reste dans la barre de sélection.",
+        "SDP porté DANS la grille, UX symétrique source/destination : clic sur l'en-tête d'une colonne destination la sélectionne → barre d'actions AU-DESSUS de la grille (comme la sélection de sources) avec « Voir SDP » (transport_file COURANT du receiver, via nouvelle route GET /receiver-sdp) et « Coller un SDP » (modale textarea → apply-sdp). Côté source, « Voir SDP » reste dans la barre de sélection.",
         "Suppression du panneau SDP en bas de page (sélecteurs source/destination + textarea) : redondant avec les actions de la grille.",
-        "Composant partagé BT.Grid : nouveau crochet OPT-IN `destinationActions` = menu « ⋯ » d'actions unitaires par colonne destination (sans impact sur les plugins qui ne le passent pas)."
+        "Composant partagé BT.Grid : nouveau crochet OPT-IN `destinationActions` = sélection d'UNE destination (clic en-tête colonne) + barre d'actions au-dessus, symétrique de selectionActions (sans impact sur les plugins qui ne le passent pas)."
       ],
       "fixes": [
         "docker.image suit désormais strictement `version` (était resté en 0.3.0 en 0.4.0 → « Migrer » bouclait ; setdefault de deploy.py n'écrase pas un image épinglé)."
