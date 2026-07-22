@@ -50,7 +50,7 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
-from nmos import NmosNode, NmosError
+from nmos import NmosNode, NmosError, parse_sdp_legs
 
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 BMD_DIR = os.environ.get("BMD_DIR", "/bmd")               # volume RO du parc bmd_nmos
@@ -332,6 +332,43 @@ def _sim_disconnect(receiver_key):
         save_sim_routing(routing)
 
 
+# SDP simulé : transportfile synthétique pour exercer « voir / coller un SDP » sans matériel.
+_SIM_MEDIA = {
+    "audio": ("m=audio {port} RTP/AVP 97", "a=rtpmap:97 L24/48000/2"),
+    "video": ("m=video {port} RTP/AVP 96", "a=rtpmap:96 raw/90000"),
+    "data": ("m=video {port} RTP/AVP 100", "a=rtpmap:100 smpte291/90000"),
+}
+
+
+def _synth_sim_sdp(machine, s):
+    """SDP synthétique d'un sender du parc simulé (le matériel réel publie un vrai transportfile)."""
+    mip, port, src = s.get("mcast"), s.get("port", 5004), machine.get("host")
+    media, rtpmap = _SIM_MEDIA.get(s.get("essence"), _SIM_MEDIA["video"])
+    return "\n".join([
+        "v=0", f"o=- 0 0 IN IP4 {src}", f"s={s.get('label')}", "t=0 0",
+        media.format(port=port), f"c=IN IP4 {mip}/64",
+        f"a=source-filter:incl IN IP4 {mip} {src}", rtpmap,
+        "a=ts-refclk:ptp=IEEE1588-2008:traceable", "a=mediaclk:direct=0", ""])
+
+
+def _sim_apply_sdp(receiver_key, sdp):
+    """Colle un SDP en simulation : on route le receiver vers le sender démo dont le multicast
+    correspond au SDP (le seul lien représentable dans le modèle simulé)."""
+    _, r = _sim_receiver(receiver_key)
+    if not r:
+        raise NmosError("receiver simulé inconnu")
+    want = {leg.get("multicast_ip") for leg in parse_sdp_legs(sdp)}
+    for m in SIM_PARC:
+        nk = f"sim:{m['id']}"
+        for s in m["senders"]:
+            if s.get("mcast") in want:
+                routing = load_sim_routing()
+                routing[receiver_key] = f"{nk}|{s['id']}"
+                save_sim_routing(routing)
+                return {"ok": True, "matched_sender": s["label"]}
+    raise NmosError("en simulation, le SDP doit pointer le multicast d'un sender du parc démo")
+
+
 # --------------------------------------------------------------------------- inventaire réel
 
 def bmd_nodes():
@@ -559,6 +596,62 @@ def disconnect(receiver_key):
     if not rn:
         raise NmosError("receiver introuvable dans le parc")
     NmosNode(rn["host"], rn["port"]).disable_receiver(rid)
+
+
+def sender_sdp_for(sender_key):
+    """SDP (transportfile) publié par un sender, désigné par sa clé de grille. LECTURE seule."""
+    if is_sim():
+        m, s = _sim_sender(sender_key)
+        if not s:
+            raise NmosError("sender simulé inconnu")
+        return _synth_sim_sdp(m, s)
+    nodes = {n["node_key"]: n for n in all_nodes()}
+    snk, sid = _split_key(sender_key)
+    sn = nodes.get(snk)
+    if not sn:
+        raise NmosError("sender introuvable dans le parc")
+    sdp = NmosNode(sn["host"], sn["port"]).sender_sdp(sid)
+    if not (sdp or "").strip():
+        raise NmosError("le sender ne publie pas de transportfile (SDP)")
+    return sdp
+
+
+def receiver_sdp_for(receiver_key):
+    """SDP (transport_file) COURANT d'un receiver — ce à quoi il est abonné. LECTURE seule.
+    Erreur claire si la destination ne porte aucun SDP (non abonnée)."""
+    if is_sim():
+        sk = load_sim_routing().get(receiver_key)
+        m, s = _sim_sender(sk) if sk else (None, None)
+        if not s:
+            raise NmosError("destination non abonnée (aucun SDP chargé)")
+        return _synth_sim_sdp(m, s)
+    nodes = {n["node_key"]: n for n in all_nodes()}
+    rnk, rid = _split_key(receiver_key)
+    rn = nodes.get(rnk)
+    if not rn:
+        raise NmosError("receiver introuvable dans le parc")
+    sdp = NmosNode(rn["host"], rn["port"]).receiver_sdp(rid)
+    if not (sdp or "").strip():
+        raise NmosError("la destination n'a pas de SDP chargé (non abonnée)")
+    return sdp
+
+
+def apply_sdp_to_receiver(receiver_key, sdp):
+    """Colle un SDP ARBITRAIRE sur un receiver (PATCH staged + activation immédiate). ÉCRITURE :
+    abonne l'équipement au flux décrit par le SDP fourni, hors grille des senders connus."""
+    if not (sdp or "").strip():
+        raise NmosError("SDP vide")
+    if not parse_sdp_legs(sdp):
+        raise NmosError("SDP invalide : aucune ligne m=/c= avec multicast exploitable")
+    if is_sim():
+        return _sim_apply_sdp(receiver_key, sdp)
+    nodes = {n["node_key"]: n for n in all_nodes()}
+    rnk, rid = _split_key(receiver_key)
+    rn = nodes.get(rnk)
+    if not rn:
+        raise NmosError("receiver introuvable dans le parc")
+    NmosNode(rn["host"], rn["port"]).apply_sdp(rid, sdp, enable=True)
+    return {"ok": True}
 
 
 BOUNCE_DELAY = 1.5  # s entre désarmement et réarmement d'un sender (laisse l'équipement relâcher)
@@ -789,6 +882,22 @@ class Handler(BaseHTTPRequestHandler):
                                                   debug=debug))
             if parts == ["nodes"]:
                 return self._send(200, {"nodes": all_nodes(), "simulated": is_sim()})
+            if parts == ["sender-sdp"]:
+                sk = q.get("sender_key")
+                if not sk:
+                    return self._send(400, {"error": "sender_key requis"})
+                try:
+                    return self._send(200, {"sdp": sender_sdp_for(sk)})
+                except NmosError as e:
+                    return self._send(502, {"error": str(e)})
+            if parts == ["receiver-sdp"]:
+                rk = q.get("receiver_key")
+                if not rk:
+                    return self._send(400, {"error": "receiver_key requis"})
+                try:
+                    return self._send(200, {"sdp": receiver_sdp_for(rk)})
+                except NmosError as e:
+                    return self._send(502, {"error": str(e)})
             if parts == ["salvos"]:
                 return self._send(200, {"salvos": load_salvos()})
             if parts == ["snapshots"]:
@@ -823,6 +932,16 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(502, {"error": str(e)})
                 invalidate_grid()
                 return self._send(200, {"ok": True})
+            if parts == ["apply-sdp"]:
+                rk, sdp = body.get("receiver_key"), body.get("sdp")
+                if not rk or not (sdp or "").strip():
+                    return self._send(400, {"error": "receiver_key et sdp requis"})
+                try:
+                    res = apply_sdp_to_receiver(rk, sdp)
+                except NmosError as e:
+                    return self._send(502, {"error": str(e)})
+                invalidate_grid()
+                return self._send(200, res)
             if parts == ["take-group"]:
                 rg, sg = body.get("receiver_group"), body.get("sender_group")
                 if not rg or not sg:

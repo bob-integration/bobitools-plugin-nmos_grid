@@ -229,6 +229,13 @@ class NmosNode:
                 "interface_ip": tp0.get("interface_ip"),
                 "has_sdp": bool(tf.get("data")), "legs": legs}
 
+    def receiver_sdp(self, rid):
+        """Le transport_file (SDP) COURANT chargé sur un receiver — ce à quoi il est abonné.
+        Texte brut ; '' si le receiver ne porte aucun SDP (non abonné). LECTURE seule."""
+        d = self._req("GET", f"connection/{self.conn_ver()}/single/receivers/{rid}/active") or {}
+        tf = d.get("transport_file") or {}
+        return tf.get("data") or ""
+
     def apply_sdp(self, rid, sdp, enable=True):
         """PATCH staged du receiver avec le SDP fourni + activation immédiate.
         ÉCRITURE : abonne un équipement réel à un flux. Renvoie le staged résultant."""

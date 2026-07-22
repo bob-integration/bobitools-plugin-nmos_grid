@@ -145,6 +145,23 @@ button.ng-mname:hover .ng-caret { color: var(--accent); }
 .ng-rep-line.ok { border-left-color: var(--status-running-fg); }
 .ng-rep-line.fail { border-left-color: var(--status-stopped-fg); color: var(--status-stopped-fg); }
 
+/* ── SDP : textarea de collage (dans la modale) + modale d'affichage ── */
+.ng-sdp-text { width: 100%; box-sizing: border-box; margin-top: 8px; min-height: 160px; resize: vertical;
+  font-family: var(--font-mono, monospace); font-size: 11.5px; line-height: 1.45;
+  background: var(--bg-input); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; }
+
+/* Modale d'affichage d'un SDP (overlay léger, monté dans le fragment) */
+.ng-modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, 0.5); }
+.ng-modal-box { background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius);
+  width: min(720px, 92vw); max-height: 86vh; display: flex; flex-direction: column; padding: 14px; gap: 10px; }
+.ng-modal-head { display: flex; align-items: center; gap: 10px; }
+.ng-modal-head h4 { margin: 0; font-size: 14px; }
+.ng-modal-head .ng-spacer { flex: 1; }
+.ng-modal-pre { margin: 0; overflow: auto; background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px; font-family: var(--font-mono, monospace); font-size: 11.5px;
+  line-height: 1.45; white-space: pre; }
+
 /* ── Sélection de senders par clic sur en-tête + actions IS-05 ── */
 .ng-selectable { cursor: pointer; user-select: none; -webkit-user-select: none; }
 .ng-col-h.ng-selectable:hover, .ng-grp-col-h.ng-selectable:hover { outline: 1px solid var(--accent); outline-offset: -1px; }
