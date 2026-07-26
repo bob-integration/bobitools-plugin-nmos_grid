@@ -20,6 +20,7 @@ window.BTTools.nmos_grid = (function () {
     let view = "flux";                  // "flux" | "signal"
     let wiredOnly = false;              // masque les destinations sans croisement actif
     let directTake = false;             // TAKE direct : clic = route immédiate (BT.Grid : sans barre TAKE)
+    let sort = "none";                  // ordre d'affichage : "none" (annoncé) | "az" | "za" | "essence"
     let pollTimer = null;
     let btGrid = null;                  // instance BT.Grid (mount une fois, setData ensuite)
     let sdpEsc = null;                  // handler Échap de la modale SDP (retiré à la fermeture)
@@ -32,6 +33,9 @@ window.BTTools.nmos_grid = (function () {
     const POLL_MS = 7000;
     const ESS_ORDER = { video: 0, audio: 1, data: 2 };
     const ESS_CHIP = { video: "V", audio: "A", data: "ANC" };
+    const SORT_MODES = ["none", "az", "za", "essence"];
+    // Comparateur naturel (« Ch 2 » avant « Ch 10 »), insensible à la casse/accents.
+    const cmpStr = (a, b) => String(a == null ? "" : a).localeCompare(String(b == null ? "" : b), undefined, { numeric: true, sensitivity: "base" });
 
     // Normalisation pour la recherche : minuscules + suppression des accents.
     const norm = (s) => (s == null ? "" : String(s)).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -47,11 +51,12 @@ window.BTTools.nmos_grid = (function () {
         filters.essence = p.essence || ""; filters.machine = p.machine || "";
         wiredOnly = !!p.wiredOnly;
         directTake = !!p.directTake;
+        if (SORT_MODES.indexOf(p.sort) >= 0) sort = p.sort;
     }
     function savePrefs() {
         try {
             window.localStorage.setItem(PREF_KEY(), JSON.stringify({
-                view, essence: filters.essence, machine: filters.machine, wiredOnly, directTake
+                view, essence: filters.essence, machine: filters.machine, wiredOnly, directTake, sort
             }));
         } catch (e) { /* quota / mode privé : on ignore */ }
     }
@@ -63,6 +68,7 @@ window.BTTools.nmos_grid = (function () {
         applyI18n();
         $("#ng-f-view").value = view;
         $("#ng-f-essence").value = filters.essence;
+        $("#ng-f-sort").value = sort;
         $("#ng-f-wired").checked = wiredOnly;
         $("#ng-f-direct").checked = directTake;
         $("#ng-refresh").addEventListener("click", () => refresh(true));
@@ -73,6 +79,7 @@ window.BTTools.nmos_grid = (function () {
         $("#ng-f-view").addEventListener("change", (e) => { view = e.target.value; savePrefs(); renderGrid(); });
         $("#ng-f-essence").addEventListener("change", (e) => { filters.essence = e.target.value; savePrefs(); renderGrid(); });
         $("#ng-f-machine").addEventListener("change", (e) => { filters.machine = e.target.value; savePrefs(); renderGrid(); });
+        $("#ng-f-sort").addEventListener("change", (e) => { sort = e.target.value; savePrefs(); renderGrid(); });
         $("#ng-f-wired").addEventListener("change", (e) => { wiredOnly = e.target.checked; savePrefs(); renderGrid(); });
         // directTake pilote features.takeBar (figé au mount BT.Grid) → on remonte la grille
         $("#ng-f-direct").addEventListener("change", (e) => { directTake = e.target.checked; savePrefs(); renderGrid(true); });
@@ -226,11 +233,29 @@ window.BTTools.nmos_grid = (function () {
             _d: d,
         };
     }
+    // Rang d'essence d'un item d'axe (plus petit rang parmi ses essences) pour le tri « par essence ».
+    function essRank(x) {
+        let r = 9;
+        ((x._d && x._d.essences) || []).forEach((e) => { const v = ESS_ORDER[e] == null ? 9 : ESS_ORDER[e]; if (v < r) r = v; });
+        return r;
+    }
+    // Tri d'un axe (machines + flux). BT.Grid ordonne les groupes par 1re apparition et conserve
+    // l'ordre interne → trier par (machine, critère item) suffit à ordonner les deux niveaux.
+    function sortAxis(arr) {
+        if (sort === "none") return arr;
+        const dir = sort === "za" ? -1 : 1;
+        return arr.slice().sort((a, b) => {
+            const g = cmpStr(a.group && a.group.label, b.group && b.group.label);
+            if (g) return dir * g;
+            if (sort === "essence") { const e = essRank(a) - essRank(b); if (e) return e; }
+            return dir * cmpStr(a.label, b.label);
+        });
+    }
     function buildAxes() {
         const sN = (grid.senders || []).filter(itemVisible);
         const rN = (grid.receivers || []).filter(itemVisible);
-        const sources = descsFor(sN, "sender").map((d) => toAxisItem(d, true, "s"));
-        let destinations = descsFor(rN, "receiver").map((d) => toAxisItem(d, false, "r"));
+        const sources = sortAxis(descsFor(sN, "sender").map((d) => toAxisItem(d, true, "s")));
+        let destinations = sortAxis(descsFor(rN, "receiver").map((d) => toAxisItem(d, false, "r")));
         if (wiredOnly) destinations = destinations.filter((x) => x.active);
         return { sources, destinations };
     }

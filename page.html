@@ -23,6 +23,13 @@
     </select>
     <label class="ng-flabel" data-i18n="plugin.nmos_grid.machine">Machine</label>
     <select id="ng-f-machine"><option value="" data-i18n="plugin.nmos_grid.all">Toutes</option></select>
+    <label class="ng-flabel" data-i18n="plugin.nmos_grid.sort">Tri</label>
+    <select id="ng-f-sort" title="Ordre d'affichage des sources et destinations (équipements + flux)">
+      <option value="none" data-i18n="plugin.nmos_grid.sortNone">Ordre annoncé</option>
+      <option value="az" data-i18n="plugin.nmos_grid.sortAZ">Nom A→Z</option>
+      <option value="za" data-i18n="plugin.nmos_grid.sortZA">Nom Z→A</option>
+      <option value="essence" data-i18n="plugin.nmos_grid.sortEssence">Par essence</option>
+    </select>
     <label class="ng-check"><input type="checkbox" id="ng-f-wired">
       <span data-i18n="plugin.nmos_grid.wiredOnly">Câblées uniquement</span></label>
     <label class="ng-check" title="Un clic sur un croisement route immédiatement, sans étape « Préparer → TAKE »">

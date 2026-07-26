@@ -1,6 +1,17 @@
 {
-  "current": "0.5.0",
+  "current": "0.5.1",
   "versions": [
+    {
+      "version": "0.5.1",
+      "published_at": "2026-07-26",
+      "changes": [
+        "Menu déroulant « Tri » (à côté de Machine) pour ordonner l'affichage des sources et destinations : « Ordre annoncé » (défaut, comportement historique = ordre annoncé par le périphérique NMOS), « Nom A→Z » / « Nom Z→A » (tri alphabétique naturel, « Ch 2 » avant « Ch 10 »), « Par essence » (V → A → ANC puis nom). Répond aux périphériques qui annoncent leurs flux dans un ordre incohérent.",
+        "Le tri porte à la fois sur l'ordre des équipements (machines) et sur les flux internes ; s'applique identiquement aux sources et aux destinations. Réalisé côté plugin dans buildAxes() (tri par (machine, critère item)) — BT.Grid ordonnant les groupes par 1re apparition, aucun changement au composant partagé. Les épinglages restent prioritaires.",
+        "Choix persisté en localStorage (clé prefs), comme Vue/Essence. Nouvelles chaînes i18n FR/EN (plugin.nmos_grid.sort*)."
+      ],
+      "fixes": [],
+      "known_bugs": []
+    },
     {
       "version": "0.5.0",
       "published_at": "2026-07-13",
