@@ -454,6 +454,19 @@ def _match_active(senders, receivers, debug=False):
         # Repli multicast : tout leg receiver dont le multicast_ip == un dest_ip de sender.
         best, best_exact = None, False
         for s in senders:
+            # Un sender DÉSARMÉ n'émet rien, mais IS-05 /active continue de publier sa dernière
+            # destination : sur beaucoup de châssis, les senders audio/ANC au repos annoncent tous
+            # l'adresse du sender vidéo actif (vécu sur Bobi.Studio, cf. nmos_diag qui les écarte
+            # pareillement). L'ancien code les acceptait comme candidats : le receiver se voyait
+            # attribuer le PREMIER sender rencontré dans l'ordre d'annonce IS-04 — souvent un
+            # audio au repos, qui partage jusqu'à la source_ip du châssis et passait donc même
+            # pour une correspondance SSM « exacte ». Ce croisement fantôme est ensuite recopié
+            # dans les snapshots/salvos (current_crosspoints → active_sender_key), et un rappel de
+            # salvo poussait alors le SDP audio de ce sender sur une entrée vidéo. On ne corrèle
+            # donc que des senders réellement en émission ; à défaut, pas de croisement affiché,
+            # ce qui est la vérité (le receiver ne reçoit rien).
+            if not s.get("master_enable"):
+                continue
             slegs = _sender_legs(s)
             matched, exact = False, False
             for rl in _receiver_legs(r):

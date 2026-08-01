@@ -1,6 +1,15 @@
 {
-  "current": "0.5.1",
+  "current": "0.5.2",
   "versions": [
+    {
+      "version": "0.5.2",
+      "published_at": "2026-08-01",
+      "changes": [],
+      "fixes": [
+        "Détection des croisements : le repli par corrélation multicast ignore désormais les senders désarmés (master_enable=false). Ils continuent d'annoncer leur dernière destination en IS-05 /active — sur beaucoup de châssis, les senders audio/ANC au repos portent l'adresse (et la source_ip) du sender vidéo actif — et pouvaient donc être retenus à sa place, y compris comme correspondance SSM « exacte ». Le croisement fantôme se retrouvait dans les snapshots et salvos, dont le rappel poussait un SDP audio sur une entrée vidéo."
+      ],
+      "known_bugs": []
+    },
     {
       "version": "0.5.1",
       "published_at": "2026-07-26",
