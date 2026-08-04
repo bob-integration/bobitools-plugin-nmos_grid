@@ -36,28 +36,26 @@
       <input type="checkbox" id="ng-f-direct">
       <span data-i18n="plugin.nmos_grid.directTake">TAKE direct</span></label>
     <button class="btn" id="ng-refresh" type="button" title="Actualiser">↻</button>
-    <button class="btn btn-green" id="ng-add" type="button" data-i18n="plugin.nmos_grid.addNode">+ Node manuel</button>
+    <button class="btn" id="ng-parc" type="button" data-i18n="plugin.nmos_grid.parcBtn">Parc</button>
   </div>
 
   <div class="ng-sim-hint" id="ng-sim-hint" hidden data-i18n="plugin.nmos_grid.simHint">
-    Aucun équipement dans l'inventaire : parc SIMULÉ actif. Ajoutez un node manuel ou peuplez le parc « Convertisseurs Blackmagic » pour piloter du matériel réel.
+    Aucun équipement dans le parc : grille SIMULÉE active. Déclarez vos équipements dans l'outil « Parc NMOS » pour piloter du matériel réel.
   </div>
 
-  <form class="ng-form" id="ng-form" hidden>
-    <div class="ng-form-grid">
-      <label for="ng-f-name" data-i18n="plugin.nmos_grid.f.name">Nom</label>
-      <input type="text" id="ng-f-name" placeholder="Bobi.Studio">
-      <label for="ng-f-host" data-i18n="plugin.nmos_grid.f.host">Adresse</label>
-      <input type="text" id="ng-f-host" placeholder="10.141.4.200">
-      <label for="ng-f-port" data-i18n="plugin.nmos_grid.f.port">Port API NMOS</label>
-      <input type="number" id="ng-f-port" placeholder="5000">
-    </div>
+  <!-- Parc, en LECTURE SEULE : la liste des équipements appartient à l'outil « Parc NMOS ».
+       On l'affiche ici pour répondre à « pourquoi cette machine n'est-elle pas dans la
+       grille ? » sans quitter l'écran. -->
+  <div class="ng-form" id="ng-form" hidden>
+    <p class="ng-parc-hint" data-i18n="plugin.nmos_grid.parcHint">
+      Le parc est détenu par l'outil « Parc NMOS » : c'est là qu'on ajoute ou retire un
+      équipement, et tous les outils NMOS suivent.
+    </p>
     <div class="ng-manual" id="ng-manual"></div>
     <div class="ng-form-actions">
-      <button class="btn btn-green" type="submit" data-i18n="plugin.nmos_grid.save">Ajouter</button>
       <button class="btn" type="button" id="ng-f-cancel" data-i18n="plugin.nmos_grid.cancel">Fermer</button>
     </div>
-  </form>
+  </div>
 
   <!-- La barre « préparer → TAKE » et la barre d'actions sur la sélection sont désormais
        fournies par BT.Grid (montées dans #ng-grid-wrap). -->

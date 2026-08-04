@@ -1,7 +1,7 @@
 {
   "plugin.nmos_grid.title": "Grille NMOS",
   "plugin.nmos_grid.simBadge": "SIMULATION",
-  "plugin.nmos_grid.simHint": "Aucun équipement dans l'inventaire : parc SIMULÉ actif. Ajoutez un node manuel ou peuplez le parc « Convertisseurs Blackmagic » pour piloter du matériel réel.",
+  "plugin.nmos_grid.simHint": "Aucun équipement dans le parc : grille SIMULÉE active. Déclarez vos équipements dans l'outil « Parc NMOS » pour piloter du matériel réel.",
   "plugin.nmos_grid.essence": "Essence",
   "plugin.nmos_grid.machine": "Machine",
   "plugin.nmos_grid.sort": "Tri",
@@ -28,11 +28,6 @@
   "plugin.nmos_grid.lgCollapsed": "équipement replié (cliquez sur son nom)",
   "plugin.nmos_grid.lgPinned": "épinglé en tête",
   "plugin.nmos_grid.lgInferred": "groupe déduit du libellé",
-  "plugin.nmos_grid.addNode": "+ Node manuel",
-  "plugin.nmos_grid.f.name": "Nom",
-  "plugin.nmos_grid.f.host": "Adresse",
-  "plugin.nmos_grid.f.port": "Port API NMOS",
-  "plugin.nmos_grid.save": "Ajouter",
   "plugin.nmos_grid.cancel": "Annuler",
   "plugin.nmos_grid.loading": "Chargement…",
   "plugin.nmos_grid.empty": "Aucun sender ou receiver à afficher (parc vide, injoignable, ou filtré).",
@@ -49,7 +44,6 @@
   "plugin.nmos_grid.disconnectGroupReport": "Déconnexion groupée",
   "plugin.nmos_grid.nomatch": "sans correspondance",
   "plugin.nmos_grid.disconnected": "Destination déconnectée",
-  "plugin.nmos_grid.hostRequired": "Adresse et port requis",
   "plugin.nmos_grid.salvos": "Salvos",
   "plugin.nmos_grid.salvoNew": "+ Depuis le routage courant",
   "plugin.nmos_grid.noSalvo": "Aucun salvo. « + Depuis le routage courant » capture les croisements actifs.",
@@ -109,5 +103,8 @@
   "plugin.nmos_grid.sdp.noSrc": "Choisissez une source",
   "plugin.nmos_grid.sdp.noSdp": "Collez un SDP",
   "plugin.nmos_grid.sdp.firstOnly": "SDP de la 1re source sélectionnée",
-  "plugin.nmos_grid.sdp.firstDst": "SDP de la 1re destination du groupe"
+  "plugin.nmos_grid.sdp.firstDst": "SDP de la 1re destination du groupe",
+  "plugin.nmos_grid.parcBtn": "Parc",
+  "plugin.nmos_grid.parcHint": "Le parc est détenu par l'outil « Parc NMOS » : c'est là qu'on ajoute ou retire un équipement, et tous les outils NMOS suivent.",
+  "plugin.nmos_grid.parcEmpty": "Parc vide — déclarez vos équipements dans l'outil « Parc NMOS »."
 }

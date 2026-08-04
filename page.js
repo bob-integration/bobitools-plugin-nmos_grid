@@ -72,9 +72,10 @@ window.BTTools.nmos_grid = (function () {
         $("#ng-f-wired").checked = wiredOnly;
         $("#ng-f-direct").checked = directTake;
         $("#ng-refresh").addEventListener("click", () => refresh(true));
-        $("#ng-add").addEventListener("click", () => { $("#ng-form").hidden = false; renderManual(); });
+        $("#ng-parc").addEventListener("click", () => {
+            const box = $("#ng-form"); box.hidden = !box.hidden; if (!box.hidden) renderParc();
+        });
         $("#ng-f-cancel").addEventListener("click", () => { $("#ng-form").hidden = true; });
-        $("#ng-form").addEventListener("submit", onAddNode);
         $("#ng-search").addEventListener("input", (e) => { search = e.target.value || ""; renderGrid(); });
         $("#ng-f-view").addEventListener("change", (e) => { view = e.target.value; savePrefs(); renderGrid(); });
         $("#ng-f-essence").addEventListener("change", (e) => { filters.essence = e.target.value; savePrefs(); renderGrid(); });
@@ -395,31 +396,28 @@ window.BTTools.nmos_grid = (function () {
         refresh(true);
     }
 
-    // ── Nodes manuels ────────────────────────────────────────
-    async function onAddNode(ev) {
-        ev.preventDefault();
-        const body = { name: $("#ng-f-name").value.trim(), host: $("#ng-f-host").value.trim(),
-                       port: parseInt($("#ng-f-port").value, 10) || 0 };
-        if (!body.host || !body.port) { toast(tr("plugin.nmos_grid.hostRequired", "Adresse et port requis"), "error"); return; }
-        try { await ctx.api("nodes", { method: "POST", body }); }
-        catch (e) { toast(e.message, "error"); return; }
-        $("#ng-f-name").value = $("#ng-f-host").value = $("#ng-f-port").value = "";
-        await refresh(true);
-        renderManual();
-    }
-
-    async function renderManual() {
+    // ── Parc (lecture seule) ─────────────────────────────────
+    async function renderParc() {
         let d;
         try { d = await ctx.api("nodes"); } catch (e) { return; }
-        const manual = (d.nodes || []).filter((n) => n.source === "manual");
+        const nodes = d.nodes || [];
         const box = $("#ng-manual");
-        box.innerHTML = manual.map((n) => `<div class="ng-manual-row">
-            <span>${esc(n.machine)} <span class="ng-mono">${esc(n.host)}:${n.port}</span></span>
-            <button class="btn btn-red ng-del" data-id="${esc(n.node_key.split(":")[1])}">✕</button></div>`).join("");
-        box.querySelectorAll(".ng-del").forEach((b) => b.addEventListener("click", async () => {
-            try { await ctx.api("nodes/" + b.dataset.id, { method: "DELETE" }); } catch (e) { toast(e.message, "error"); return; }
-            renderManual(); refresh(true);
-        }));
+        if (!nodes.length) {
+            box.innerHTML = `<p class="ng-parc-hint">${esc(tr("plugin.nmos_grid.parcEmpty",
+                "Parc vide — déclarez vos équipements dans l'outil « Parc NMOS »."))}</p>`;
+            return;
+        }
+        // Regroupé par châssis : une machine à quatre cages ne doit pas occuper quatre
+        // lignes dans une liste qui sert à se repérer.
+        const byMachine = new Map();
+        nodes.forEach((n) => {
+            const k = n.machine_key || n.node_key;
+            if (!byMachine.has(k)) byMachine.set(k, { machine: n.machine, host: n.host, ports: [] });
+            byMachine.get(k).ports.push(n.port);
+        });
+        box.innerHTML = [...byMachine.values()].map((m) => `<div class="ng-manual-row">
+            <span>${esc(m.machine)} <span class="ng-mono">${esc(m.host)}:${
+                esc(m.ports.sort((a, b) => a - b).join(", "))}</span></span></div>`).join("");
     }
 
     // ── SDP : voir une source / voir+coller une destination ──

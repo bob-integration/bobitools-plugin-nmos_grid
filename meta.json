@@ -1,6 +1,19 @@
 {
-  "current": "0.5.2",
+  "current": "0.6.0",
   "versions": [
+    {
+      "version": "0.6.0",
+      "published_at": "2026-08-04",
+      "changes": [
+        "Le parc n'appartient plus à cet outil : il est lu depuis « Parc NMOS » (park.json, volume monté en lecture seule) — plus de déclaration de node manuel ici",
+        "Les clés de nodes sont REPRISES du parc : salvos et instantanés enregistrés continuent de désigner les mêmes équipements",
+        "Le bouton « Parc » remplace « + Node manuel » : liste en lecture seule, regroupée par châssis"
+      ],
+      "fixes": [],
+      "known_bugs": [
+        "Nécessite l'outil « Parc NMOS » : sans lui, la grille bascule en mode simulé"
+      ]
+    },
     {
       "version": "0.5.2",
       "published_at": "2026-08-01",

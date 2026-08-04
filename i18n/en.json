@@ -1,7 +1,7 @@
 {
   "plugin.nmos_grid.title": "NMOS grid",
   "plugin.nmos_grid.simBadge": "SIMULATION",
-  "plugin.nmos_grid.simHint": "No equipment in the inventory: SIMULATED fleet active. Add a manual node or populate the « Blackmagic converters » fleet to drive real hardware.",
+  "plugin.nmos_grid.simHint": "No device in the park: SIMULATED grid active. Declare your devices in the \"NMOS park\" tool to drive real hardware.",
   "plugin.nmos_grid.essence": "Essence",
   "plugin.nmos_grid.machine": "Machine",
   "plugin.nmos_grid.sort": "Sort",
@@ -28,11 +28,6 @@
   "plugin.nmos_grid.lgCollapsed": "collapsed equipment (click its name)",
   "plugin.nmos_grid.lgPinned": "pinned to top",
   "plugin.nmos_grid.lgInferred": "group inferred from label",
-  "plugin.nmos_grid.addNode": "+ Manual node",
-  "plugin.nmos_grid.f.name": "Name",
-  "plugin.nmos_grid.f.host": "Address",
-  "plugin.nmos_grid.f.port": "NMOS API port",
-  "plugin.nmos_grid.save": "Add",
   "plugin.nmos_grid.cancel": "Cancel",
   "plugin.nmos_grid.loading": "Loading…",
   "plugin.nmos_grid.empty": "No sender or receiver to display (empty fleet, unreachable, or filtered out).",
@@ -49,7 +44,6 @@
   "plugin.nmos_grid.disconnectGroupReport": "Grouped disconnect",
   "plugin.nmos_grid.nomatch": "no match",
   "plugin.nmos_grid.disconnected": "Destination disconnected",
-  "plugin.nmos_grid.hostRequired": "Address and port required",
   "plugin.nmos_grid.salvos": "Salvos",
   "plugin.nmos_grid.salvoNew": "+ From current routing",
   "plugin.nmos_grid.noSalvo": "No salvo. « + From current routing » captures the active crosspoints.",
@@ -109,5 +103,8 @@
   "plugin.nmos_grid.sdp.noSrc": "Pick a source",
   "plugin.nmos_grid.sdp.noSdp": "Paste an SDP",
   "plugin.nmos_grid.sdp.firstOnly": "SDP of the 1st selected source",
-  "plugin.nmos_grid.sdp.firstDst": "SDP of the group's 1st destination"
+  "plugin.nmos_grid.sdp.firstDst": "SDP of the group's 1st destination",
+  "plugin.nmos_grid.parcBtn": "Park",
+  "plugin.nmos_grid.parcHint": "The park is owned by the \"NMOS park\" tool: that is where devices are added or removed, and every NMOS tool follows.",
+  "plugin.nmos_grid.parcEmpty": "Empty park — declare your devices in the \"NMOS park\" tool."
 }

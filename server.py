@@ -53,14 +53,15 @@ from urllib.parse import urlparse, parse_qs
 from nmos import NmosNode, NmosError, parse_sdp_legs
 
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
-BMD_DIR = os.environ.get("BMD_DIR", "/bmd")               # volume RO du parc bmd_nmos
-TARGETS_FILE = os.path.join(DATA_DIR, "targets.json")     # nodes NMOS manuels
+# Le parc NMOS ne nous appartient plus : il est détenu par l'outil « Parc NMOS », qui le
+# publie dans son volume, monté ici en lecture seule. Cet outil ne déclare donc plus aucun
+# équipement — il route ce que le parc lui donne.
+PARC_DIR = os.environ.get("PARC_DIR", "/parc")
+PARK_FILE = os.path.join(PARC_DIR, "park.json")
+PARK_CONTRACT = 1                                         # version de contrat attendue
 SALVOS_FILE = os.path.join(DATA_DIR, "salvos.json")
 SNAPSHOTS_FILE = os.path.join(DATA_DIR, "snapshots.json")
 SIM_ROUTING_FILE = os.path.join(DATA_DIR, "sim_routing.json")
-
-# Ports NMOS par défaut des convertisseurs BMD (un node par cage SFP, cf. bmd_nmos).
-_BMD_DEFAULT = {"base_port": 8090, "step": 2, "count": 4}
 
 _io_lock = threading.Lock()
 
@@ -98,14 +99,6 @@ def _load_list(path):
 def _save_list(path, data):
     with _io_lock:
         _write(path, data)
-
-
-def load_targets():
-    return _load_list(TARGETS_FILE)
-
-
-def save_targets(t):
-    _save_list(TARGETS_FILE, t)
 
 
 def load_salvos():
@@ -371,40 +364,45 @@ def _sim_apply_sdp(receiver_key, sdp):
 
 # --------------------------------------------------------------------------- inventaire réel
 
-def bmd_nodes():
-    """Nodes NMOS déduits du parc bmd_nmos (lecture seule). Un node par cage SFP."""
-    devices = _read(os.path.join(BMD_DIR, "devices.json"), [])
-    models = _read(os.path.join(BMD_DIR, "models.json"), {}) or {}
-    out = []
-    for d in devices if isinstance(devices, list) else []:
-        model = models.get(d.get("model")) or _BMD_DEFAULT
-        base = int(d.get("base_port") or model.get("base_port") or 8090)
-        step = int(model.get("step") or 2)
-        count = int(model.get("count") or _BMD_DEFAULT["count"] or 4)
-        for i in range(count):
-            out.append({"node_key": f"bmd:{d.get('id')}:{i + 1}",
-                        "machine_key": f"bmd:{d.get('id')}",
-                        "machine": d.get("name") or d.get("host") or "?",
-                        "host": d.get("host"), "port": base + step * i,
-                        "source": "bmd", "sfp": i + 1})
-    return out
+def park_nodes():
+    """Points d'entrée publiés par « Parc NMOS ». Liste vide si le parc est indisponible.
+
+    Le contrat est VÉRIFIÉ : un schéma qu'on ne comprend pas est refusé plutôt que lu au
+    mieux — mieux vaut une grille vide, qui se voit, que des nodes fantômes.
+    """
+    raw = _read(PARK_FILE, None)
+    if not isinstance(raw, dict) or raw.get("version") != PARK_CONTRACT:
+        return []
+    return [n for n in (raw.get("nodes") or []) if n.get("host")]
 
 
 def all_nodes():
-    """Tous les nodes NMOS réels du parc : convertisseurs bmd_nmos + cibles manuelles."""
-    nodes = bmd_nodes()
-    for t in load_targets():
-        nk = f"manual:{t.get('id')}"
-        nodes.append({"node_key": nk, "machine_key": nk,
-                      "machine": t.get("name") or f"{t.get('host')}:{t.get('port')}",
-                      "host": t.get("host"), "port": int(t.get("port") or 80),
-                      "source": "manual"})
-    return nodes
+    """Nodes NMOS du parc, dans le vocabulaire de cet outil.
+
+    `node_key` reprend la CLÉ HISTORIQUE publiée par le parc quand elle existe. C'est
+    indispensable et non cosmétique : les salvos et les instantanés enregistrés stockent des
+    croisements de la forme « <node_key>|<uuid de ressource> ». Changer la dérivation des
+    clés à la migration aurait invalidé en silence toutes les grilles mémorisées par les
+    utilisateurs.
+    """
+    out = []
+    for e in park_nodes():
+        nk = (e.get("compat") or {}).get("nmos_grid") or e.get("key")
+        out.append({
+            "node_key": nk,
+            # machine_key ne sert qu'au regroupement à l'écran (les cages d'un même
+            # châssis) : il n'est jamais persisté, il peut donc suivre le parc.
+            "machine_key": e.get("machine_key") or nk,
+            "machine": e.get("machine") or e.get("name") or e.get("host"),
+            "host": e.get("host"), "port": int(e.get("port") or 80),
+            "source": "parc", "sfp": e.get("slot"),
+        })
+    return out
 
 
 def is_sim():
-    """Simulation active tant qu'aucun node réel n'est déclaré (inventaire vide)."""
-    return not bmd_nodes() and not load_targets()
+    """Simulation active tant que le parc ne fournit aucun node réel."""
+    return not park_nodes()
 
 
 # --------------------------------------------------------------------------- grille (état)
@@ -925,16 +923,7 @@ class Handler(BaseHTTPRequestHandler):
         parts = [p for p in urlparse(self.path).path.split("/") if p]
         body = self._body()
         try:
-            if parts == ["nodes"]:
-                host = (body.get("host") or "").strip()
-                if not host or not body.get("port"):
-                    return self._send(400, {"error": "host et port requis"})
-                targets = load_targets()
-                targets.append({"id": uuid.uuid4().hex[:8], "name": body.get("name") or "",
-                                "host": host, "port": int(body["port"])})
-                save_targets(targets)
-                invalidate_grid()
-                return self._send(201, {"ok": True})
+            # Plus de route d'ajout de node : le parc appartient à « Parc NMOS ».
             if parts == ["take"]:
                 rk, sk = body.get("receiver_key"), body.get("sender_key")
                 if not rk or not sk:
@@ -1022,10 +1011,6 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         parts = [p for p in urlparse(self.path).path.split("/") if p]
         try:
-            if len(parts) == 2 and parts[0] == "nodes":
-                save_targets([t for t in load_targets() if t.get("id") != parts[1]])
-                invalidate_grid()
-                return self._send(200, {"ok": True})
             if len(parts) == 2 and parts[0] == "salvos":
                 save_salvos([s for s in load_salvos() if s.get("id") != parts[1]])
                 return self._send(200, {"ok": True})
@@ -1099,8 +1084,8 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     os.makedirs(DATA_DIR, exist_ok=True)
     port = int(os.environ.get("PORT", "8080"))
-    print(f"nmos_grid : écoute sur :{port} (data={DATA_DIR}, bmd={BMD_DIR}, "
-          f"simulation={is_sim()})", flush=True)
+    print(f"nmos_grid : écoute sur :{port} (data={DATA_DIR}, parc={PARC_DIR}, "
+          f"nodes={len(park_nodes())}, simulation={is_sim()})", flush=True)
     ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
 
 
