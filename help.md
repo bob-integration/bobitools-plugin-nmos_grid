@@ -10,13 +10,17 @@ sans l'étape « préparer / TAKE » (pratique en exploitation ; préférence m�
 > **Replier / déplier un équipement** : cliquez directement sur **son nom** dans la grille
 > (le chevron ▸/▾ n'est qu'un indicateur). Vaut pour les sources comme les destinations.
 
-L'outil ne possède aucun inventaire propre : il **lit le parc** des autres outils. Le parc
-« Convertisseurs Blackmagic » est repris automatiquement (volume partagé, monté en lecture
-seule). Ajoutez les autres équipements NMOS (orchestrateur Bobi.Studio port 5000, easy-nmos…)
-via **+ Node manuel**.
+L'outil ne possède aucun inventaire propre : le parc appartient à l'outil **« Parc NMOS »**,
+qui le publie et que la grille lit en lecture seule. On y ajoute ou retire un équipement une
+seule fois, et **tous les outils NMOS suivent** — la grille, le diagnostic, la supervision
+BCP-008, la synchro PTP et les sauvegardes de configuration.
 
-> **Mode simulation.** Tant qu'aucun équipement n'est déclaré (inventaire vide, aucun node
-> manuel), l'outil bascule sur un **parc SIMULÉ** — 3 machines avec senders/receivers vidéo et
+Le bouton **Parc** affiche ce que la grille voit, regroupé par châssis. Il répond à la
+question « pourquoi cette machine n'est-elle pas dans la grille ? » sans quitter l'écran :
+si elle n'y figure pas, elle n'est pas déclarée dans « Parc NMOS » ; si elle y figure sans
+sources ni destinations, c'est son NMOS qui ne répond pas.
+
+> **Mode simulation.** Tant que le parc est vide, l'outil bascule sur un **parc SIMULÉ** — 3 machines avec senders/receivers vidéo et
 > audio — dont le routage est mémorisé localement. Toute l'interface (takes, salvos, snapshots)
 > est ainsi testable **sans matériel**. Un bandeau *SIMULATION* le signale. Dès qu'un vrai node
 > apparaît, la grille pilote le matériel réel.
