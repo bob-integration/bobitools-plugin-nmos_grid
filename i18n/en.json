@@ -106,5 +106,6 @@
   "plugin.nmos_grid.sdp.firstDst": "SDP of the group's 1st destination",
   "plugin.nmos_grid.parcBtn": "Park",
   "plugin.nmos_grid.parcHint": "The park is owned by the \"NMOS park\" tool: that is where devices are added or removed, and every NMOS tool follows.",
-  "plugin.nmos_grid.parcEmpty": "Empty park — declare your devices in the \"NMOS park\" tool."
+  "plugin.nmos_grid.parcEmpty": "Empty park — declare your devices in the \"NMOS park\" tool.",
+  "plugin.nmos_grid.cage": "Cage"
 }

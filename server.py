@@ -148,14 +148,26 @@ def _strip_essence(label):
     return m.group("prefix").strip(), m.group("suf").strip().upper()
 
 
+def group_scope(item):
+    """PORTÉE d'un nom de groupe : le Device s'il existe, sinon le node.
+
+    Ce n'est pas un détail d'affichage. Un nom de groupe (« SDI 1 ») n'est unique QUE dans le
+    périmètre où il est émis : chaque Device numérote ses signaux à partir de 1 chez lui. Regrouper
+    à l'échelle du châssis — ce qui était fait — fusionnait les « SDI 1 » de deux cages, ou des
+    deux Devices d'un même node, en UNE ligne mélangeant les deux : l'opérateur voyait un signal
+    là où il y en a deux, et un take groupé n'en commutait que la moitié."""
+    return "%s|%s" % (item.get("node_key") or "", item.get("device_id") or "")
+
+
 def annotate_groups(items):
     """Complète le champ `group` des ressources SANS grouphint par REPLI HEURISTIQUE : au sein
-    d'une même machine, un préfixe de libellé partagé par ≥ 2 signaux (essence retirée) forme un
-    groupe marqué inferred:true. Les ressources déjà groupées (grouphint) ne sont pas touchées."""
-    by_machine = defaultdict(list)
+    d'un même Device (cf. `group_scope`), un préfixe de libellé partagé par ≥ 2 signaux (essence
+    retirée) forme un groupe marqué inferred:true. Les ressources déjà groupées (grouphint) ne sont
+    pas touchées."""
+    by_scope = defaultdict(list)
     for it in items:
-        by_machine[it.get("machine_key")].append(it)
-    for members in by_machine.values():
+        by_scope[group_scope(it)].append(it)
+    for members in by_scope.values():
         buckets, roles = defaultdict(list), {}
         for it in members:
             if it.get("group"):                       # grouphint : on ne déduit rien
@@ -197,11 +209,19 @@ def _pair_group(receivers, senders):
 
 
 def _resolve_group(grid, side, sel):
-    """Membres d'un groupe désigné par {machine_key, name} dans la grille courante."""
+    """Membres d'un groupe désigné par {scope, name} dans la grille courante.
+
+    `machine_key` reste accepté en repli : une page laissée ouverte avant mise à jour continue
+    d'envoyer l'ancienne désignation, et un take qui échoue en silence serait pire que la portée
+    trop large qu'on corrige ici."""
     if not isinstance(sel, dict):
         return []
-    mk, name = sel.get("machine_key"), sel.get("name")
+    name = sel.get("name")
+    scope, mk = sel.get("scope"), sel.get("machine_key")
     items = grid["receivers"] if side == "r" else grid["senders"]
+    if scope:
+        return [x for x in items
+                if group_scope(x) == scope and (x.get("group") or {}).get("name") == name]
     return [x for x in items
             if x.get("machine_key") == mk and (x.get("group") or {}).get("name") == name]
 
@@ -396,6 +416,9 @@ def all_nodes():
             "machine": e.get("machine") or e.get("name") or e.get("host"),
             "host": e.get("host"), "port": int(e.get("port") or 80),
             "source": "parc", "sfp": e.get("slot"),
+            # Le nom que le node se donne (/self), publié par le parc : dernier recours pour
+            # distinguer deux cages homonymes d'un même châssis.
+            "node_label": e.get("label") or "",
         })
     return out
 
@@ -522,6 +545,8 @@ def _build_grid_live(debug=False):
             senders.append({
                 "key": f"{n['node_key']}|{s['id']}", "id": s["id"], "node_key": n["node_key"],
                 "machine_key": mk, "machine": n["machine"], "host": n["host"], "port": n["port"],
+                "device_id": s.get("device_id"), "device": s.get("device", ""),
+                "node_label": n.get("node_label") or "", "slot": n.get("sfp"),
                 "label": s["label"], "essence": s.get("essence", ""), "group": s.get("group"),
                 "master_enable": s.get("master_enable", False),
                 "dest_ip": s.get("dest_ip"), "dest_port": s.get("dest_port"),
@@ -530,6 +555,8 @@ def _build_grid_live(debug=False):
             receivers.append({
                 "key": f"{n['node_key']}|{r['id']}", "id": r["id"], "node_key": n["node_key"],
                 "machine_key": mk, "machine": n["machine"], "host": n["host"], "port": n["port"],
+                "device_id": r.get("device_id"), "device": r.get("device", ""),
+                "node_label": n.get("node_label") or "", "slot": n.get("sfp"),
                 "label": r["label"], "essence": r.get("essence", ""), "group": r.get("group"),
                 "master_enable": r.get("master_enable", False),
                 "sender_id": r.get("sender_id"), "multicast_ip": r.get("multicast_ip"),

@@ -10,7 +10,7 @@ grille) et les receivers (lignes), et surtout on lit l'ÉTAT COURANT d'abonnemen
 receiver (IS-05 /single/receivers/<id>/active) pour savoir à quel sender il est raccordé.
 
 Méthodes clés :
-  - snapshot()          : label + senders (essence, destination, group BCP-002-01) + receivers
+  - snapshot()          : label + DEVICES + senders (essence, destination, group BCP-002-01) + receivers
                           (état d'abonnement + group, y compris sender_id / multicast lus dans
                           /active). `group` = natural grouping lu dans le tag IS-04
                           `urn:x-nmos:tag:grouphint/v1.0` → {name, role, inferred:false}.
@@ -255,9 +255,25 @@ class NmosNode:
 
     # -- Agrégat pour la grille -----------------------------------------------------
 
+    def devices(self):
+        """{id: label} des Devices du node. Un node peut en exposer PLUSIEURS (un par sous-ensemble
+        de l'équipement : cage, direction, fonction) et c'est alors la seule chose qui distingue
+        deux ressources homonymes — chaque moteur numérote ses signaux à partir de 1 chez lui.
+        Jamais lève : sans cette liste on garde les `device_id` portés par les ressources, on perd
+        seulement les libellés."""
+        out = {}
+        try:
+            for d in self._list("devices"):
+                if isinstance(d, dict) and d.get("id"):
+                    out[d["id"]] = (d.get("label") or "").strip()
+        except NmosError:
+            pass
+        return out
+
     def snapshot(self):
-        """Label + senders (essence + destination + état) + receivers (état d'abonnement)."""
+        """Label + devices + senders (essence + destination + état) + receivers (abonnement)."""
         info = self.self_info()
+        devices = self.devices()
         flows = {f.get("id"): _fmt_short(f.get("format")) for f in self._list("flows")}
         senders = []
         for s in self._list("senders"):
@@ -267,6 +283,8 @@ class NmosNode:
             except NmosError:
                 act = {}
             senders.append({"id": sid, "label": s.get("label") or sid,
+                            "device_id": s.get("device_id"),
+                            "device": devices.get(s.get("device_id"), ""),
                             "essence": flows.get(s.get("flow_id"), ""),
                             "group": _grouphint(s),
                             "master_enable": act.get("master_enable", False),
@@ -280,6 +298,8 @@ class NmosNode:
             except NmosError:
                 act = {}
             receivers.append({"id": rid, "label": r.get("label") or rid,
+                              "device_id": r.get("device_id"),
+                              "device": devices.get(r.get("device_id"), ""),
                               "essence": _fmt_short(r.get("format")),
                               "group": _grouphint(r),
                               "master_enable": act.get("master_enable", False),
@@ -289,4 +309,5 @@ class NmosNode:
                               "dest_port": act.get("dest_port"),
                               "has_sdp": act.get("has_sdp", False),
                               "legs": act.get("legs")})
-        return {"label": info.get("label") or "", "senders": senders, "receivers": receivers}
+        return {"label": info.get("label") or "", "devices": devices,
+                "senders": senders, "receivers": receivers}

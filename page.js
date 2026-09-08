@@ -141,16 +141,34 @@ window.BTTools.nmos_grid = (function () {
         if (!search) return true;
         const q = norm(search);
         const gn = x.group && x.group.name ? x.group.name : "";
-        return norm(x.label).indexOf(q) >= 0 || norm(gn).indexOf(q) >= 0 || norm(x.machine).indexOf(q) >= 0;
+        // Le Device fait partie de ce qu'on cherche : sur un équipement qui en expose plusieurs,
+        // c'est souvent le seul nom que l'exploitant connaît (« la carte B », « le décodeur »).
+        return norm(x.label).indexOf(q) >= 0 || norm(gn).indexOf(q) >= 0
+            || norm(x.machine).indexOf(q) >= 0 || norm(x.device || "").indexOf(q) >= 0;
     }
     function itemVisible(x) { return essenceOk(x) && machineOk(x) && searchOk(x); }
 
     // ── Descripteurs selon la vue (flux = 1 item ; signal = groupe BCP-002-01) ──
-    // Descripteur : { kind, members[], label, machine_key, essences[], groupName?, inferred? }
+    // Descripteur : { kind, members[], label, machine_key, scope, scopeLabel, essences[], … }
+
+    // PORTÉE d'un nom de groupe : le Device s'il existe, sinon le node. Identique au serveur
+    // (`group_scope`) — deux « SDI 1 » émis par deux Devices sont deux signaux, pas un.
+    function scopeOf(it) { return (it.node_key || "") + "|" + (it.device_id || ""); }
+
+    // Comment NOMMER cette portée quand il faut départager deux homonymes : le Device d'abord
+    // (c'est lui que l'équipement expose pour ça), puis le nom que le node se donne, puis sa cage.
+    function scopeLabelOf(it) {
+        if (it.device) return it.device;
+        if (it.node_label) return it.node_label;
+        if (it.slot) return tr("plugin.nmos_grid.cage", "Cage") + " " + it.slot;
+        return it.port ? it.host + ":" + it.port : (it.host || "");
+    }
+
     function descsFor(items, side) {
         if (view === "flux") {
             return items.map((it) => ({
                 kind: side, members: [it], label: it.label, machine_key: it.machine_key,
+                scope: scopeOf(it), scopeLabel: scopeLabelOf(it),
                 essences: it.essence ? [it.essence] : [], group: it.group || null
             }));
         }
@@ -159,15 +177,20 @@ window.BTTools.nmos_grid = (function () {
             const gn = it.group && it.group.name;
             if (!gn) {                          // signal orphelin : affiché seul
                 out.push({ kind: side, members: [it], label: it.label, machine_key: it.machine_key,
+                    scope: scopeOf(it), scopeLabel: scopeLabelOf(it),
                     essences: it.essence ? [it.essence] : [], group: null });
                 return;
             }
-            if (!byGroup.has(gn)) {
+            // Clé de groupe = PORTÉE + nom. Indexer sur le seul nom fusionnait les groupes
+            // homonymes de deux Devices (ou de deux cages d'un même châssis) en une ligne.
+            const gk = scopeOf(it) + "\u0000" + gn;
+            if (!byGroup.has(gk)) {
                 const d = { kind: "group", members: [], label: gn, machine_key: it.machine_key,
+                    scope: scopeOf(it), scopeLabel: scopeLabelOf(it),
                     essences: [], groupName: gn, inferred: !!(it.group && it.group.inferred) };
-                byGroup.set(gn, d); out.push(d);
+                byGroup.set(gk, d); out.push(d);
             }
-            const d = byGroup.get(gn);
+            const d = byGroup.get(gk);
             d.members.push(it);
             if (it.essence && d.essences.indexOf(it.essence) < 0) d.essences.push(it.essence);
         });
@@ -221,7 +244,7 @@ window.BTTools.nmos_grid = (function () {
         return out;
     }
     function descKey(d, prefix) {
-        return d.kind === "group" ? ("grp:" + prefix + ":" + d.machine_key + "|" + d.groupName)
+        return d.kind === "group" ? ("grp:" + prefix + ":" + d.scope + "|" + d.groupName)
             : (d.members[0] && d.members[0].key);
     }
     function toAxisItem(d, isSource, prefix) {
@@ -252,11 +275,34 @@ window.BTTools.nmos_grid = (function () {
             return dir * cmpStr(a.label, b.label);
         });
     }
+    // Deux entrées d'un même châssis peuvent porter le MÊME libellé : chaque Device (ou chaque
+    // cage) numérote ses signaux à partir de 1 chez lui. On préfixe alors par la portée — et
+    // SEULEMENT dans ce cas : préfixer systématiquement allongerait tous les libellés d'un parc
+    // qui, dans son immense majorité, n'a rien d'ambigu.
+    function disambiguate(axis) {
+        const seen = new Map();                       // châssis|libellé → [items]
+        axis.forEach((x) => {
+            const k = (x.group && x.group.key) + "\u0000" + x.label;
+            if (!seen.has(k)) seen.set(k, []);
+            seen.get(k).push(x);
+        });
+        seen.forEach((xs) => {
+            if (xs.length < 2) return;
+            const scopes = new Set(xs.map((x) => x._d.scope));
+            if (scopes.size < 2) return;              // vrais doublons dans une même portée : rien à dire
+            xs.forEach((x) => {
+                const sl = x._d.scopeLabel;
+                if (sl) x.label = sl + " · " + x.label;
+            });
+        });
+        return axis;
+    }
+
     function buildAxes() {
         const sN = (grid.senders || []).filter(itemVisible);
         const rN = (grid.receivers || []).filter(itemVisible);
-        const sources = sortAxis(descsFor(sN, "sender").map((d) => toAxisItem(d, true, "s")));
-        let destinations = sortAxis(descsFor(rN, "receiver").map((d) => toAxisItem(d, false, "r")));
+        const sources = sortAxis(disambiguate(descsFor(sN, "sender").map((d) => toAxisItem(d, true, "s"))));
+        let destinations = sortAxis(disambiguate(descsFor(rN, "receiver").map((d) => toAxisItem(d, false, "r"))));
         if (wiredOnly) destinations = destinations.filter((x) => x.active);
         return { sources, destinations };
     }
@@ -282,8 +328,8 @@ window.BTTools.nmos_grid = (function () {
             let d;
             try {
                 d = await ctx.api("take-group", { method: "POST", body: {
-                    receiver_group: { machine_key: rd.machine_key, name: rd.groupName },
-                    sender_group: { machine_key: cd.machine_key, name: cd.groupName } } });
+                    receiver_group: { scope: rd.scope, machine_key: rd.machine_key, name: rd.groupName },
+                    sender_group: { scope: cd.scope, machine_key: cd.machine_key, name: cd.groupName } } });
             } catch (e) { toast(e.message, "error"); return; }
             showReport(tr("plugin.nmos_grid.takeGroupReport", "Take groupé"), d);
         } else {
@@ -303,7 +349,7 @@ window.BTTools.nmos_grid = (function () {
         if (rd.kind === "group") {
             if (!window.confirm(`${tr("plugin.nmos_grid.confirmDiscGroup", "Déconnecter tout le groupe")} « ${rd.label} » ?`)) return;
             let d;
-            try { d = await ctx.api("disconnect-group", { method: "POST", body: { receiver_group: { machine_key: rd.machine_key, name: rd.groupName } } }); }
+            try { d = await ctx.api("disconnect-group", { method: "POST", body: { receiver_group: { scope: rd.scope, machine_key: rd.machine_key, name: rd.groupName } } }); }
             catch (e) { toast(e.message, "error"); return; }
             showReport(tr("plugin.nmos_grid.disconnectGroupReport", "Déconnexion groupée"), d);
         } else {

@@ -106,5 +106,6 @@
   "plugin.nmos_grid.sdp.firstDst": "SDP de la 1re destination du groupe",
   "plugin.nmos_grid.parcBtn": "Parc",
   "plugin.nmos_grid.parcHint": "Le parc est détenu par l'outil « Parc NMOS » : c'est là qu'on ajoute ou retire un équipement, et tous les outils NMOS suivent.",
-  "plugin.nmos_grid.parcEmpty": "Parc vide — déclarez vos équipements dans l'outil « Parc NMOS »."
+  "plugin.nmos_grid.parcEmpty": "Parc vide — déclarez vos équipements dans l'outil « Parc NMOS ».",
+  "plugin.nmos_grid.cage": "Cage"
 }

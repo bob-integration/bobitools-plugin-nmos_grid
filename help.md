@@ -55,10 +55,21 @@ Le regroupement suit le **Natural Grouping BCP-002-01** :
   ressource. Sa valeur `« <nom du groupe>:<rôle> »` (ex. `SDI 1:VIDEO`) donne le nom du groupe
   et le rôle du signal dedans.
 - **Repli heuristique** : si un node ne pose **pas** de grouphint, le groupe est **déduit** du
-  **préfixe commun** des libellés d'une même machine, une fois le suffixe d'essence retiré
+  **préfixe commun** des libellés d'un même Device, une fois le suffixe d'essence retiré
   (`Vidéo`, `Audio 1`, `ANC`…). Un préfixe partagé par au moins deux signaux forme un groupe,
   signalé discrètement par **≈** (« groupe déduit »). Un signal isolé (sans grouphint ni préfixe
   partageable) reste **affiché seul**.
+
+**La portée d'un nom de groupe est le Device**, jamais le châssis. Un équipement NMOS peut exposer
+**plusieurs Devices** — une carte, une direction ou une fonction par Device — et chacun numérote ses
+signaux à partir de 1 chez lui : deux « SDI 1 » venus de deux Devices sont **deux signaux
+différents**, et la grille leur donne deux lignes. Même chose pour deux cages d'un châssis, qui sont
+deux nodes distincts.
+
+Quand deux entrées d'un même châssis portent alors le **même libellé**, celui-ci est préfixé par ce
+qui les distingue : le **Device** (`Carte B · SDI 1`), à défaut le nom que le node se donne, à
+défaut sa cage. Ce préfixe n'apparaît **qu'en cas d'ambiguïté réelle** — un parc sans homonymes
+s'affiche exactement comme avant.
 
 **État d'un croisement groupé** : **complet** (plein ●) si **toutes** les paires d'essences
 communes sont routées entre les deux groupes ; **partiel** (hachuré ◐) si **certaines**
@@ -71,7 +82,8 @@ seulement ; **vide** sinon.
   seule colonne / ligne) mais ses signaux sont masqués ; un point **●** sur l'en-tête replié
   signale qu'il **cache des croisements actifs**.
 - **Recherche** — le champ de la barre filtre **lignes et colonnes en direct** (insensible à la
-  casse et aux accents) sur le libellé du signal, le nom du groupe et le nom de la machine. Une
+  casse et aux accents) sur le libellé du signal, le nom du groupe, le nom de la machine et celui
+  du **Device**. Une
   machine dont aucun signal ne correspond disparaît ; vider le champ restaure tout.
 - **Câblées uniquement** — masque les **destinations sans aucun croisement actif** (en vue par
   signal, un groupe entièrement non routé disparaît).

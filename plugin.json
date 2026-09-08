@@ -2,7 +2,7 @@
   "license": "GPL-3.0-or-later",
   "type": "nmos_grid",
   "label": "Grille NMOS",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "runtime": "docker",
   "requires": [
     {
@@ -27,7 +27,7 @@
     "page_css": "page.css"
   },
   "docker": {
-    "image": "bobitool-nmos_grid:0.6.0",
+    "image": "bobitool-nmos_grid:0.7.0",
     "build": true,
     "port": 8080,
     "volume": "/data",

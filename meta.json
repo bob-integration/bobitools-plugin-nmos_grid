@@ -1,6 +1,23 @@
 {
-  "current": "0.6.0",
+  "current": "0.7.0",
   "versions": [
+    {
+      "version": "0.7.0",
+      "published_at": "2026-09-08",
+      "changes": [
+        "Les Devices existent : la grille lit /devices et rattache chaque sender/receiver au sien — un équipement peut en exposer plusieurs (une carte, une direction, une fonction par Device)",
+        "Le nom de groupe BCP-002-01 n'est plus interprété qu'à l'intérieur d'un Device : c'est sa seule portée d'unicité, chaque Device numérotant ses signaux à partir de 1 chez lui",
+        "Le libellé est préfixé par le Device (« Carte B · SDI 1 ») UNIQUEMENT en cas d'ambiguïté réelle dans le châssis ; à défaut de Device, la portée est nommée par le node puis par sa cage",
+        "La recherche porte aussi sur le nom du Device"
+      ],
+      "fixes": [
+        "Deux signaux homonymes émis par deux Devices — ou par deux cages d'un même châssis — fusionnaient en UNE ligne : l'opérateur voyait un signal là où il y en a deux, et le take groupé n'en commutait que la moitié (le serveur résolvait le groupe à l'échelle du châssis). Mesuré sur un node à deux Devices monté pour l'occasion : 2 colonnes fausses en 0.6.0, 4 colonnes justes en 0.7.0",
+        "Le repli heuristique (nodes sans grouphint) déduisait ses groupes à l'échelle du châssis : les libellés identiques de deux cages formaient un seul groupe"
+      ],
+      "known_bugs": [
+        "Jamais confronté à un équipement RÉEL exposant deux Devices : validé sur un faux node IS-04 écrit pour ce cas, le parc du site n'en comptant aucun (et étant injoignable au moment du test)"
+      ]
+    },
     {
       "version": "0.6.0",
       "published_at": "2026-08-04",
