@@ -38,5 +38,141 @@
         "ro": true
       }
     ]
+  },
+  "permissions": [
+    {
+      "id": "crosspoint.take",
+      "label": "Commuter un croisement",
+      "default_roles": [
+        "operator"
+      ],
+      "description": "Take, déconnexion (unitaire ou groupée), coller un SDP sur un récepteur."
+    },
+    {
+      "id": "sender.control",
+      "label": "Piloter les émetteurs",
+      "default_roles": [
+        "operator"
+      ],
+      "description": "Activer / couper un sender, le relancer (bounce) : coupe la source pour tous ses abonnés."
+    },
+    {
+      "id": "salvo.recall",
+      "label": "Rappeler un salvo",
+      "default_roles": [
+        "operator"
+      ]
+    },
+    {
+      "id": "snapshot.restore",
+      "label": "Restaurer un instantané",
+      "default_roles": [
+        "operator"
+      ],
+      "description": "Réapplique tout le routage mémorisé, déconnexions comprises."
+    },
+    {
+      "id": "preset.manage",
+      "label": "Gérer salvos et instantanés",
+      "default_roles": [
+        "operator"
+      ],
+      "description": "Créer, modifier, supprimer."
+    }
+  ],
+  "acl": {
+    "resources": [
+      {
+        "key": "receiver",
+        "label": "Récepteurs",
+        "choices": "grid",
+        "choices_list": "receivers",
+        "choices_id": "key"
+      },
+      {
+        "key": "salvo",
+        "label": "Salvos",
+        "choices": "salvos",
+        "choices_list": "salvos"
+      },
+      {
+        "key": "snapshot",
+        "label": "Instantanés",
+        "choices": "snapshots",
+        "choices_list": "snapshots"
+      }
+    ],
+    "routes": [
+      {
+        "method": "POST",
+        "path": "take",
+        "perm": "crosspoint.take",
+        "resource": {
+          "receiver": "body.receiver_key"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "apply-sdp",
+        "perm": "crosspoint.take",
+        "resource": {
+          "receiver": "body.receiver_key"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "disconnect",
+        "perm": "crosspoint.take",
+        "resource": {
+          "receiver": "body.receiver_key"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "take-group",
+        "perm": "crosspoint.take"
+      },
+      {
+        "method": "POST",
+        "path": "disconnect-group",
+        "perm": "crosspoint.take"
+      },
+      {
+        "method": "POST",
+        "path": "bounce",
+        "perm": "sender.control"
+      },
+      {
+        "method": "POST",
+        "path": "bounce-group",
+        "perm": "sender.control"
+      },
+      {
+        "method": "POST",
+        "path": "sender-enable",
+        "perm": "sender.control"
+      },
+      {
+        "method": "POST",
+        "path": "salvos/{salvo}/apply",
+        "perm": "salvo.recall",
+        "resource": {
+          "salvo": "{salvo}"
+        }
+      },
+      {
+        "method": "POST",
+        "path": "snapshots/{snapshot}/apply",
+        "perm": "snapshot.restore",
+        "resource": {
+          "snapshot": "{snapshot}"
+        }
+      },
+      {
+        "method": "*",
+        "path": "**",
+        "perm": "preset.manage"
+      }
+    ]
   }
 }
